@@ -1,0 +1,91 @@
+package com.atl.module.modules;
+
+import com.atl.module.management.Category;
+import com.atl.module.management.Module;
+import com.google.gson.JsonObject;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.network.NetworkPlayerInfo;
+import net.minecraft.entity.player.EntityPlayer;
+
+import java.util.Arrays;
+import java.util.List;
+
+public class AntiBot extends Module {
+
+    private static final Minecraft mc = Minecraft.getMinecraft();
+    private static AntiBot instance;
+    
+    private static boolean tabCheck = true;
+    private static boolean idCheck = true;
+
+    public AntiBot() {
+        super("AntiBot", "", Category.MISC);
+        instance = this;
+    }
+
+    public static AntiBot getInstance() {
+        return instance;
+    }
+
+    @Override
+    public void loadSettings(JsonObject settings) {
+        if (settings.has("tabCheck")) tabCheck = settings.get("tabCheck").getAsBoolean();
+        if (settings.has("idCheck")) idCheck = settings.get("idCheck").getAsBoolean();
+    }
+
+    @Override
+    public JsonObject saveSettings() {
+        JsonObject settings = new JsonObject();
+        settings.addProperty("tabCheck", tabCheck);
+        settings.addProperty("idCheck", idCheck);
+        return settings;
+    }
+
+    @Override
+    public boolean handleSetCommand(String[] parts) {
+        if (parts.length < 3) return false;
+        String setting = parts[2].toLowerCase();
+        if (setting.equals("tabcheck")) {
+            tabCheck = Boolean.parseBoolean(parts[3]);
+            return true;
+        } else if (setting.equals("idcheck")) {
+            idCheck = Boolean.parseBoolean(parts[3]);
+            return true;
+        }
+        return false;
+    }
+
+    @Override
+    public List<String> getSettings() {
+        return Arrays.asList(
+                "tabCheck (true/false) - Current: " + tabCheck,
+                "idCheck (true/false) - Current: " + idCheck
+        );
+    }
+
+    /**
+     * Static helper to check if a player is a bot.
+     * Can be used by ESP, Chams, etc.
+     */
+    public static boolean isBot(EntityPlayer player) {
+        // If AntiBot is disabled, nothing is considered a bot
+        if (instance == null || !instance.isEnabled()) return false;
+
+        // 1. Tab List Check (Most reliable for Hypixel)
+        if (tabCheck) {
+            NetworkPlayerInfo info = mc.getNetHandler().getPlayerInfo(player.getUniqueID());
+            if (info == null) return true;
+        }
+
+        // 2. High ID Check (Bots often have IDs > 1,000,000)
+        if (idCheck) {
+            if (player.getEntityId() >= 1000000) return true;
+        }
+
+        // 3. Basic validity checks
+        if (player.getName().isEmpty() || player.getName().contains(" ")) return true;
+        // Note: Removing automatic invisible check as it might flag players with actual potions
+
+        return false;
+    }
+}
