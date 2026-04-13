@@ -1,10 +1,13 @@
 package com.atl.module.management;
 
-public class Setting {
-    public String name;
-    public boolean focused; // Used by the GUI for text input or sliders
+import lombok.Getter;
+import lombok.Setter;
+import lombok.RequiredArgsConstructor;
 
-    public Setting(String name) {
-        this.name = name;
-    }
+@Getter
+@Setter
+@RequiredArgsConstructor
+public class Setting {
+    public final String name;
+    private boolean focused; // Used by the GUI for text input or sliders
 }

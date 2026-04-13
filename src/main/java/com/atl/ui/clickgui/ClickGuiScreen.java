@@ -82,6 +82,7 @@ public class ClickGuiScreen extends GuiScreen {
         public boolean collapsed;
         public boolean dragging;
         public int dragX, dragY;
+        private final List<Module> modules;
 
         public Frame(Category category, int x, int y, int width, int headerHeight) {
             this.category = category;
@@ -91,6 +92,14 @@ public class ClickGuiScreen extends GuiScreen {
             this.headerHeight = headerHeight;
             this.collapsed = false;
             this.dragging = false;
+
+            // Cache modules to avoid iterating the entire manager every frame
+            this.modules = new ArrayList<>();
+            for (Module m : ExampleMod.moduleManager.getAll()) {
+                if (m.getCategory() == category) {
+                    this.modules.add(m);
+                }
+            }
         }
 
         public void render(int mouseX, int mouseY, FontRenderer fontRenderer) {
@@ -100,9 +109,7 @@ public class ClickGuiScreen extends GuiScreen {
             int currentY = y + headerHeight;
 
             if (!collapsed) {
-                for (Module m : ExampleMod.moduleManager.getAll()) {
-                    if (m.getCategory() != category) continue;
-
+                for (Module m : modules) {
                     Gui.drawRect(x, currentY, x + width, currentY + headerHeight, m.isEnabled() ? 0xFF333333 : 0xFF1a1a1a);
                     fontRenderer.drawStringWithShadow(m.getName(), x + 4, currentY + 4, m.isEnabled() ? 0xFF55FF55 : -1);
                     currentY += headerHeight;
@@ -148,9 +155,7 @@ public class ClickGuiScreen extends GuiScreen {
 
             if (!collapsed) {
                 int currentY = y + headerHeight;
-                for (Module m : ExampleMod.moduleManager.getAll()) {
-                    if (m.getCategory() != category) continue;
-
+                for (Module m : modules) {
                     if (mouseX >= x && mouseX <= x + width && mouseY >= currentY && mouseY <= currentY + headerHeight) {
                         if (mouseButton == 0) m.toggle();
                         else if (mouseButton == 1) m.settingsExpanded = !m.settingsExpanded;
@@ -162,8 +167,9 @@ public class ClickGuiScreen extends GuiScreen {
                         for (Setting s : m.settings) {
                             int sHeight = (s instanceof NumberSetting) ? 14 : 12;
                             if (mouseX >= x && mouseX <= x + width && mouseY >= currentY && mouseY <= currentY + sHeight) {
-                                if (s instanceof BooleanSetting) {
+                                if (s instanceof BooleanSetting && mouseButton == 0) {
                                     ((BooleanSetting) s).toggle();
+                                    return; // Prevent clicking through to other elements
                                 }
                             }
                             currentY += sHeight;
