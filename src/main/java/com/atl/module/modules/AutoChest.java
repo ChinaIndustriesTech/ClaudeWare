@@ -1,14 +1,11 @@
 package com.atl.module.modules;
 
-import com.atl.mixin.accessor.IGuiContainer;
-import com.atl.mixin.accessor.IGuiScreen;
 import com.atl.module.management.BooleanSetting;
 import com.atl.module.management.Category;
 import com.atl.module.management.Module;
 import com.google.gson.JsonObject;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.inventory.GuiChest;
-import net.minecraft.client.gui.inventory.GuiContainer;
 import net.minecraft.init.Items;
 import net.minecraft.inventory.ContainerChest;
 import net.minecraft.inventory.Slot;
@@ -42,14 +39,12 @@ public class AutoChest extends Module {
     );
 
     private final BooleanSetting chestStealer = new BooleanSetting("ChestStealer", false);
-    private final BooleanSetting legitMode = new BooleanSetting("LegitMode", true);
-    private final BooleanSetting autoClose = new BooleanSetting("AutoClose", true);
-    
+
     private ContainerChest lastProcessedContainer = null;
 
     public AutoChest() {
         super("AutoChest", "Automatically moves valuable items to opened chests", Category.MISC);
-        addSettings(chestStealer, legitMode, autoClose);
+        addSettings(chestStealer);
     }
 
     @Override
@@ -57,20 +52,12 @@ public class AutoChest extends Module {
         if (settings.has("chestStealer")) {
             this.chestStealer.enabled = settings.get("chestStealer").getAsBoolean();
         }
-        if (settings.has("legitMode")) {
-            this.legitMode.enabled = settings.get("legitMode").getAsBoolean();
-        }
-        if (settings.has("autoClose")) {
-            this.autoClose.enabled = settings.get("autoClose").getAsBoolean();
-        }
     }
 
     @Override
     public JsonObject saveSettings() {
         JsonObject settings = new JsonObject();
         settings.addProperty("chestStealer", chestStealer.isEnabled());
-        settings.addProperty("legitMode", legitMode.isEnabled());
-        settings.addProperty("autoClose", autoClose.isEnabled());
         return settings;
     }
 
@@ -80,23 +67,13 @@ public class AutoChest extends Module {
         if (parts[2].equalsIgnoreCase("cheststealer")) {
             this.chestStealer.enabled = Boolean.parseBoolean(parts[3]);
             return true;
-        } else if (parts[2].equalsIgnoreCase("legitmode")) {
-            this.legitMode.enabled = Boolean.parseBoolean(parts[3]);
-            return true;
-        } else if (parts[2].equalsIgnoreCase("autoclose")) {
-            this.autoClose.enabled = Boolean.parseBoolean(parts[3]);
-            return true;
         }
         return false;
     }
 
     @Override
     public List<String> getSettings() {
-        return Arrays.asList(
-                "chestStealer: " + chestStealer.isEnabled(),
-                "legitMode: " + legitMode.isEnabled(),
-                "autoClose: " + autoClose.isEnabled()
-        );
+        return Arrays.asList("chestStealer (true/false) - Current: " + chestStealer.isEnabled());
     }
 
     @SubscribeEvent
@@ -172,13 +149,6 @@ public class AutoChest extends Module {
 
     private void scheduleItemMoves(Minecraft mc, ContainerChest container, List<Integer> slots, int index, int mouseButton) {
         if (index >= slots.size()) {
-            if (autoClose.isEnabled()) {
-                scheduler.schedule(() -> mc.addScheduledTask(() -> {
-                    if (mc.currentScreen instanceof GuiChest) {
-                        mc.thePlayer.closeScreen();
-                    }
-                }), 79, TimeUnit.MILLISECONDS);
-            }
             return;
         }
 
@@ -193,20 +163,7 @@ public class AutoChest extends Module {
                 if (isEnabled() && mc.thePlayer != null && mc.thePlayer.openContainer == container) {
                     ItemStack stackBeforeMove = container.getSlot(slotToMove).getStack();
 
-                    if (legitMode.isEnabled() && mc.currentScreen instanceof GuiContainer) {
-                        GuiContainer gui = (GuiContainer) mc.currentScreen;
-                        IGuiContainer accessor = (IGuiContainer) gui;
-                        Slot slot = container.getSlot(slotToMove);
-
-                        // Calculate pixel coordinates of the slot
-                        int x = accessor.getGuiLeft() + slot.xDisplayPosition + 8;
-                        int y = accessor.getGuiTop() + slot.yDisplayPosition + 8;
-
-                        // Simulate the actual click on the GUI
-                        ((IGuiScreen) gui).invokeMouseClicked(x, y, mouseButton);
-                    } else {
-                        mc.playerController.windowClick(container.windowId, slotToMove, mouseButton, 1, mc.thePlayer);
-                    }
+                    mc.playerController.windowClick(container.windowId, slotToMove, mouseButton, 1, mc.thePlayer);
                     
                     if (stackBeforeMove != null && !container.getSlot(slotToMove).getHasStack()) {
                         String direction = isStealing ? " from chest." : " to chest.";

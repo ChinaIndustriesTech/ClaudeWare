@@ -16,15 +16,19 @@ public class ConfigManager {
 
     private final ModuleManager moduleManager;
     private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
-    private final Path configDir;
 
     public ConfigManager(ModuleManager moduleManager) {
         this.moduleManager = moduleManager;
-        this.configDir = Paths.get(Minecraft.getMinecraft().mcDataDir.getAbsolutePath(), "config", "atl");
+    }
+
+    private Path getConfigDir() {
+        // Fetched lazily to prevent startup crashes when mcDataDir is null
+        return Paths.get(Minecraft.getMinecraft().mcDataDir.getAbsolutePath(), "config", "atl");
     }
 
     public boolean save(String name) {
         try {
+            Path configDir = getConfigDir();
             Files.createDirectories(configDir);
 
             JsonObject root = new JsonObject();
@@ -33,7 +37,7 @@ public class ConfigManager {
                 JsonObject moduleObj = new JsonObject();
                 moduleObj.addProperty("enabled", module.isEnabled());
                 moduleObj.addProperty("keybind", module.getKeybind());
-                
+
                 // Save custom settings for each module
                 moduleObj.add("settings", module.saveSettings());
                 
@@ -54,6 +58,7 @@ public class ConfigManager {
 
     public boolean load(String name) {
         try {
+            Path configDir = getConfigDir();
             File file = configDir.resolve(name + ".json").toFile();
             if (!file.exists()) return false;
 
@@ -86,6 +91,7 @@ public class ConfigManager {
     }
 
     public String[] listConfigs() {
+        Path configDir = getConfigDir();
         File dir = configDir.toFile();
         if (!dir.exists()) return new String[0];
         File[] files = dir.listFiles((d, n) -> n.endsWith(".json"));

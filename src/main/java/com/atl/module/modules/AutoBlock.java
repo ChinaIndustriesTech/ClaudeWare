@@ -9,7 +9,6 @@ import net.minecraft.client.settings.KeyBinding;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.item.ItemSword;
 import net.minecraft.util.Vec3;
-import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
 import org.lwjgl.input.Mouse;
@@ -30,18 +29,6 @@ public class AutoBlock extends Module {
     public AutoBlock() {
         super("AutoBlock", "BROKEN DONT USE", Category.COMBAT);
         addSettings(range, blockDuration);
-    }
-
-    @Override
-    public void onEnable() {
-        super.onEnable();
-        MinecraftForge.EVENT_BUS.register(this);
-    }
-
-    @Override
-    public void onDisable() {
-        super.onDisable();
-        MinecraftForge.EVENT_BUS.unregister(this);
     }
 
     /**
@@ -118,7 +105,7 @@ public class AutoBlock extends Module {
         // Dot product: 1.0 = perfectly facing, 0.0 = perpendicular, -1.0 = facing away
         // 0.8 is roughly a 36-degree cone.
         double dot = look.dotProduct(diff);
-        return dot > 0.5;
+        return dot > 0.8;
     }
 
     private void block(Minecraft mc) {

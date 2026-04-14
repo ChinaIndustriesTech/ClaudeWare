@@ -14,6 +14,7 @@ public class ModuleManager {
     public ModuleManager() {
         register(new Eagle());
         register(new AutoTool());
+        register(new Sprint());
         register(new FullBright());
         register(new PlayerTracker());
         register(new SprintReset());
@@ -35,6 +36,8 @@ public class ModuleManager {
         register(new ReachDisplay());
         register(new FreeLook());
         register(new AutoBlock());
+        register(new HUD());
+        register(new GUIClicker());
     }
 
     private void register(Module module) {
