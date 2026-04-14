@@ -10,6 +10,7 @@ public class Sprint extends Module {
 
     public Sprint() {
         super("Sprint", "Automatically sprints while moving forward", Category.MOVEMENT);
+        this.setEnabled(true);
     }
 
     @SubscribeEvent

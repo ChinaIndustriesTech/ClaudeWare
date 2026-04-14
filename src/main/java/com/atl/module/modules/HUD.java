@@ -16,9 +16,6 @@ import java.util.stream.Collectors;
 public class HUD extends Module {
     private final Minecraft mc = Minecraft.getMinecraft();
 
-    // Cache to store the sorted list of enabled modules
-    private List<Module> enabledModulesCache;
-
     public HUD() {
         super("HUD", "Draws the module list on screen", Category.MISC);
         setEnabled(true);
@@ -26,26 +23,25 @@ public class HUD extends Module {
 
     @SubscribeEvent
     public void onRender(RenderGameOverlayEvent.Post event) {
+        // Only render on the TEXT element to avoid drawing multiple times per tick
         if (event.type != RenderGameOverlayEvent.ElementType.TEXT || !isEnabled()) return;
 
-        // Only rebuild the list if the cache is null (invalidated)
-        if (enabledModulesCache == null) {
-            FontRenderer fr = mc.fontRendererObj;
-            enabledModulesCache = ExampleMod.moduleManager.getAll().stream()
-                    .filter(Module::isEnabled)
-                    .sorted(Comparator.comparingInt(m -> -fr.getStringWidth(m.getName())))
-                    .collect(Collectors.toList());
-        }
-
         FontRenderer fr = mc.fontRendererObj;
+
+        // Get all enabled modules, excluding the HUD itself for a cleaner look
+        List<Module> enabledModules = ExampleMod.moduleManager.getAll().stream()
+                .filter(m -> m.isEnabled() && !m.getName().equalsIgnoreCase("HUD"))
+                .sorted(Comparator.comparingInt(m -> -fr.getStringWidth(m.getName())))
+                .collect(Collectors.toList());
+
         int y = 2;
-        for (Module m : enabledModulesCache) {
-            fr.drawStringWithShadow(m.getName(), event.resolution.getScaledWidth() - fr.getStringWidth(m.getName()) - 2, y, -1);
+        for (Module m : enabledModules) {
+            // Draw module names aligned to the right side of the screen
+            String name = m.getName();
+            int x = event.resolution.getScaledWidth() - fr.getStringWidth(name) - 2;
+            
+            fr.drawStringWithShadow(name, x, y, -1); // -1 is white
             y += fr.FONT_HEIGHT + 2;
         }
-    }
-
-    public void invalidateCache() {
-        this.enabledModulesCache = null;
     }
 }
