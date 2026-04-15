@@ -38,6 +38,7 @@ public class ModuleManager {
         register(new AutoBlock());
         register(new HUD());
         register(new GUIClicker());
+        register(new AutoClicker());
     }
 
     private void register(Module module) {

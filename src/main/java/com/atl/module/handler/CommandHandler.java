@@ -60,6 +60,9 @@ public class CommandHandler {
             case "bind":
                 handleBind(parts);
                 break;
+            case "drawn":
+                handleDrawn(parts);
+                break;
             case "save":
                 handleSave(parts);
                 break;
@@ -103,6 +106,22 @@ public class CommandHandler {
                 ? EnumChatFormatting.GREEN + "enabled"
                 : EnumChatFormatting.RED + "disabled";
         sendMessage(EnumChatFormatting.GRAY + module.getName() + " " + state);
+    }
+
+    private void handleDrawn(String[] parts) {
+        if (parts.length < 2) {
+            sendMessage(EnumChatFormatting.RED + "Usage: " + PREFIX + "drawn <module>");
+            return;
+        }
+        Module module = moduleManager.get(parts[1]);
+        if (module == null) {
+            sendMessage(EnumChatFormatting.RED + "Module not found: " + parts[1]);
+            return;
+        }
+        module.setDrawn(!module.isDrawn());
+        String state = module.isDrawn() ? EnumChatFormatting.GREEN + "shown" : EnumChatFormatting.RED + "hidden";
+        sendMessage(EnumChatFormatting.GRAY + module.getName() + " is now " + state + 
+                EnumChatFormatting.GRAY + " on the HUD.");
     }
 
     private void handleSet(String[] parts) {
@@ -300,6 +319,7 @@ public class CommandHandler {
         sendMessage(EnumChatFormatting.AQUA + PREFIX + "ls/list" + EnumChatFormatting.WHITE + "  List all modules and their state");
         sendMessage(EnumChatFormatting.AQUA + PREFIX + "h/help" + EnumChatFormatting.WHITE + "  Show this help message");
         sendMessage(EnumChatFormatting.AQUA + PREFIX + "<module> <setting> <value>" + EnumChatFormatting.WHITE + "  Set a module setting");
+        sendMessage(EnumChatFormatting.AQUA + PREFIX + "drawn <module>" + EnumChatFormatting.WHITE + "  Toggle visibility on the HUD");
         sendMessage(EnumChatFormatting.AQUA + PREFIX + "b/bind <module> <key/none>" + EnumChatFormatting.WHITE + "  Bind a module to a key");
         sendMessage(EnumChatFormatting.AQUA + PREFIX + "save <name>" + EnumChatFormatting.WHITE + "  Save current config");
         sendMessage(EnumChatFormatting.AQUA + PREFIX + "load <name>" + EnumChatFormatting.WHITE + "  Load a config");

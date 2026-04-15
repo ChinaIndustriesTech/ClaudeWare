@@ -30,7 +30,7 @@ public class HUD extends Module {
 
         // Get all enabled modules, excluding the HUD itself for a cleaner look
         List<Module> enabledModules = ExampleMod.moduleManager.getAll().stream()
-                .filter(m -> m.isEnabled() && !m.getName().equalsIgnoreCase("HUD"))
+                .filter(m -> m.isEnabled() && m.isDrawn() && !m.getName().equalsIgnoreCase("HUD"))
                 .sorted(Comparator.comparingInt(m -> -fr.getStringWidth(m.getName())))
                 .collect(Collectors.toList());
 

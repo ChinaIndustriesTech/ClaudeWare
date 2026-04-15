@@ -37,6 +37,7 @@ public class ConfigManager {
                 JsonObject moduleObj = new JsonObject();
                 moduleObj.addProperty("enabled", module.isEnabled());
                 moduleObj.addProperty("keybind", module.getKeybind());
+                moduleObj.addProperty("drawn", module.isDrawn());
 
                 // Save custom settings for each module
                 moduleObj.add("settings", module.saveSettings());
@@ -76,6 +77,10 @@ public class ConfigManager {
 
                 module.setEnabled(enabled);
                 module.setKeybind(keybind);
+                
+                if (moduleObj.has("drawn")) {
+                    module.setDrawn(moduleObj.get("drawn").getAsBoolean());
+                }
                 
                 // Load custom settings
                 if (moduleObj.has("settings")) {

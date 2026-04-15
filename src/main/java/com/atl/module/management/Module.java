@@ -12,6 +12,7 @@ public abstract class Module {
     private boolean enabled = false;
     private Category category;
     private int keybind = 0; // 0 = no keybind
+    private boolean drawn = true;
 
     public List<Setting> settings = new ArrayList<>();
     public boolean settingsExpanded = false;
@@ -36,6 +37,14 @@ public abstract class Module {
         enabled = !enabled;
         if (enabled) onEnable();
         else onDisable();
+    }
+
+    public boolean isDrawn() {
+        return drawn;
+    }
+
+    public void setDrawn(boolean drawn) {
+        this.drawn = drawn;
     }
 
     public String getName() {
