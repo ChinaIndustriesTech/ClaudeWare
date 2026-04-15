@@ -77,6 +77,9 @@ public class AntiBot extends Module {
         // If AntiBot is disabled, nothing is considered a bot
         if (instance == null || !instance.isEnabled()) return false;
 
+        // 0. Death time check - don't target players currently in death animation
+        if (player.deathTime != 0) return true;
+
         // 1. Network/Tab Checks
         if (tabCheck || pingCheck) {
             if (Minecraft.getMinecraft().getNetHandler() == null) return false;
@@ -84,16 +87,28 @@ public class AntiBot extends Module {
             
             if (tabCheck && info == null) return true;
             // 0 Ping check (Common bot indicator)
-            if (pingCheck && info != null && info.getResponseTime() == 0) return true;
+            if (pingCheck && info != null && info.getResponseTime() <= 0) return true;
         }
 
-        // 2. low ID Check (Bots often have IDs <= 0>)
+        // 2. low ID Check (Bots often have IDs < 0)
         if (idCheck) {
-            if (player.getEntityId() <= 0 ) return true;
+            if (player.getEntityId() < 0 ) return true;
         }
 
-        // 3. Basic validity checks
-        if (player.getName().isEmpty() || player.getName().contains(" ")) return true;
+        // 3. Name and Character validation
+        final String name = player.getName();
+        
+        // Check for invalid strings (NPC tags or formatting symbols)
+        if (name.isEmpty() || name.contains(" ") || name.contains("[NPC] ") || name.contains("§")) return true;
+
+        // Filter for characters not usable in a legitimate Minecraft IGN
+        final String valid = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890_";
+        for (int i = 0; i < name.length(); i++) {
+            if (!valid.contains(String.valueOf(name.charAt(i)))) {
+                return true;
+            }
+        }
+
         // Note: Removing automatic invisible check as it might flag players with actual potions
 
         return false;

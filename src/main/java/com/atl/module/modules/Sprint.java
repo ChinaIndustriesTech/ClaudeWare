@@ -3,8 +3,10 @@ package com.atl.module.modules;
 import com.atl.module.management.Category;
 import com.atl.module.management.Module;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.settings.KeyBinding;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
+import org.lwjgl.input.Keyboard;
 
 public class Sprint extends Module {
 
@@ -14,13 +16,14 @@ public class Sprint extends Module {
     }
 
     @SubscribeEvent
-    public void onTick(TickEvent.PlayerTickEvent event) {
-        if (!isEnabled() || event.phase != TickEvent.Phase.START) return;
+    public void onTick(TickEvent.ClientTickEvent event) {
+        if (!isEnabled()) return;
 
         Minecraft mc = Minecraft.getMinecraft();
-        // Check if moving forward, not sneaking, and not blinded/collided
-        if (mc.thePlayer != null && mc.thePlayer.moveForward > 0 && !mc.thePlayer.isSneaking() && !mc.thePlayer.isUsingItem()) {
-            mc.thePlayer.setSprinting(true);
+        int forwardKey = mc.gameSettings.keyBindForward.getKeyCode();
+        int sprintKey = mc.gameSettings.keyBindSprint.getKeyCode();
+        if (Keyboard.isKeyDown(forwardKey)) {
+            KeyBinding.setKeyBindState(sprintKey, true);
         }
     }
 }

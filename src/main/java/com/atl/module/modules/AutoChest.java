@@ -78,7 +78,7 @@ public class AutoChest extends Module {
 
     @SubscribeEvent
     public void onTick(TickEvent.ClientTickEvent event) {
-        if (!isEnabled() || event.phase != TickEvent.Phase.END) return;
+        if (!isEnabled() || event.phase != TickEvent.Phase.START) return;
 
         Minecraft mc = Minecraft.getMinecraft();
         if (mc.thePlayer == null || mc.theWorld == null) return;
@@ -155,7 +155,7 @@ public class AutoChest extends Module {
         // Randomized delay between 50ms and 150ms for human emulation
         int slotToMove = slots.get(index);
         long delay = BASE_DELAY_MS + random.nextInt(JITTER_MS + 1);
-        boolean isStealing = (mouseButton == 1);
+        boolean isStealing = (mouseButton == 1); // This boolean is now only for message formatting
 
         scheduler.schedule(() -> {
             mc.addScheduledTask(() -> {
@@ -163,7 +163,7 @@ public class AutoChest extends Module {
                 if (isEnabled() && mc.thePlayer != null && mc.thePlayer.openContainer == container) {
                     ItemStack stackBeforeMove = container.getSlot(slotToMove).getStack();
 
-                    mc.playerController.windowClick(container.windowId, slotToMove, mouseButton, 1, mc.thePlayer);
+                    mc.playerController.windowClick(container.windowId, slotToMove, 0, 1, mc.thePlayer); // Always Left-Click for Shift-Click
                     
                     if (stackBeforeMove != null && !container.getSlot(slotToMove).getHasStack()) {
                         String direction = isStealing ? " from chest." : " to chest.";

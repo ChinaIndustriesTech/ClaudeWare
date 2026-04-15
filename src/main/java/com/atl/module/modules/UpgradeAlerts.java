@@ -44,7 +44,7 @@ public class UpgradeAlerts extends Module {
         if (mc.theWorld == null || mc.thePlayer == null || !isEnabled()) return;
 
         for (EntityPlayer player : mc.theWorld.playerEntities) {
-            if (player == mc.thePlayer || player.isDead) continue;
+            if (player == mc.thePlayer || player.isDead || AntiBot.isBot(player) || Teams.isTeammate(player)) continue;
 
             boolean hasSharpness = false;
             ItemStack heldItem = player.getHeldItem();

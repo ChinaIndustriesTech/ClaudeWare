@@ -16,6 +16,7 @@ import net.minecraft.scoreboard.ScorePlayerTeam;
 import net.minecraft.scoreboard.Scoreboard;
 import net.minecraft.util.BlockPos;
 import net.minecraft.util.ChatComponentText;
+import net.minecraft.util.Vec3;
 import net.minecraft.util.EnumChatFormatting;
 import net.minecraftforge.client.event.ClientChatReceivedEvent;
 import net.minecraftforge.client.event.RenderGameOverlayEvent;
@@ -226,22 +227,51 @@ public class BedTracker extends Module {
         }
     }
 
+    private boolean isInFOV(BlockPos pos) {
+        // Calculate the vector from the player's eyes to the center of the block
+        Vec3 toBlock = new Vec3(pos.getX() + 0.5 - mc.thePlayer.posX,
+                                pos.getY() + 0.5 - (mc.thePlayer.posY + mc.thePlayer.getEyeHeight()),
+                                pos.getZ() + 0.5 - mc.thePlayer.posZ).normalize();
+        Vec3 lookVec = mc.thePlayer.getLookVec();
+        // Dot product > 0.5 corresponds to roughly a 60-degree cone
+        return lookVec.dotProduct(toBlock) > 0.5;
+    }
+
     private void findNearestBed() {
-        int radius = 20;
+        int horizontalRadius = 20; // Keep horizontal search wide
+        int verticalSearchRange = 5; // Check 4 Y levels above and below current Y
         BlockPos playerPos = new BlockPos(mc.thePlayer.posX, mc.thePlayer.posY, mc.thePlayer.posZ);
         
-        for (int x = -radius; x <= radius; x++) {
-            for (int y = -radius; y <= radius; y++) {
-                for (int z = -radius; z <= radius; z++) {
+        int startY = Math.max(0, playerPos.getY() - verticalSearchRange);
+        int endY = Math.min(255, playerPos.getY() + verticalSearchRange);
+
+        BlockPos backupBed = null;
+
+        for (int x = -horizontalRadius; x <= horizontalRadius; x++) {
+            for (int z = -horizontalRadius; z <= horizontalRadius; z++) {
+                for (int y = startY; y <= endY; y++) {
                     BlockPos checkPos = playerPos.add(x, y, z);
                     if (mc.theWorld.getBlockState(checkPos).getBlock() == Blocks.bed) {
-                        this.bedPos = checkPos;
-                        this.needsScanning = false; 
-                        sendMessage(EnumChatFormatting.GREEN + "Bed located!");
-                        return;
+                        // If the bed is in our field of view, prioritize it and stop searching
+                        if (isInFOV(checkPos)) {
+                            this.bedPos = checkPos;
+                            this.needsScanning = false;
+                            sendMessage(EnumChatFormatting.GREEN + "Bed located in FOV!");
+                            return;
+                        }
+                        // Otherwise, keep track of the first bed found as a fallback
+                        if (backupBed == null) {
+                            backupBed = checkPos;
+                        }
                     }
                 }
             }
+        }
+
+        if (backupBed != null) {
+            this.bedPos = backupBed;
+            this.needsScanning = false;
+            sendMessage(EnumChatFormatting.GREEN + "Bed located (outside FOV)!");
         }
     }
 

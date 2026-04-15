@@ -43,7 +43,7 @@ public class ArmorAlerts extends Module {
         }
 
         for (EntityPlayer player : mc.theWorld.playerEntities) {
-            if (player == mc.thePlayer) continue;
+            if (player == mc.thePlayer || AntiBot.isBot(player) || Teams.isTeammate(player)) continue;
 
             String currentTier = getArmorTier(player);
             UUID uuid = player.getUniqueID();

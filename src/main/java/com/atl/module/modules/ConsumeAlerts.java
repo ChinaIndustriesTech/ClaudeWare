@@ -36,7 +36,7 @@ public class ConsumeAlerts extends Module {
         }
 
         for (EntityPlayer player : mc.theWorld.playerEntities) {
-            if (player == mc.thePlayer) continue;
+            if (player == mc.thePlayer || AntiBot.isBot(player) || Teams.isTeammate(player)) continue;
 
             UUID uuid = player.getUniqueID();
             ItemStack heldItem = player.getItemInUse();

@@ -33,6 +33,7 @@ public class ModuleManager {
         register(new ConsumeAlerts());
         register(new AutoChest());
         register(new UpgradeAlerts());
+        register(new Teams());
         register(new ReachDisplay());
         register(new FreeLook());
         register(new AutoBlock());
