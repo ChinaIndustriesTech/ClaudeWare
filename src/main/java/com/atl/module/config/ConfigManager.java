@@ -72,11 +72,12 @@ public class ConfigManager {
 
                 JsonObject moduleObj = root.getAsJsonObject(key);
 
-                boolean enabled = moduleObj.get("enabled").getAsBoolean();
-                int keybind     = moduleObj.get("keybind").getAsInt();
-
-                module.setEnabled(enabled);
-                module.setKeybind(keybind);
+                if (moduleObj.has("enabled")) {
+                    module.setEnabled(moduleObj.get("enabled").getAsBoolean());
+                }
+                if (moduleObj.has("keybind")) {
+                    module.setKeybind(moduleObj.get("keybind").getAsInt());
+                }
                 
                 if (moduleObj.has("drawn")) {
                     module.setDrawn(moduleObj.get("drawn").getAsBoolean());

@@ -39,6 +39,10 @@ public class ModuleManager {
         register(new HUD());
         register(new GUIClicker());
         register(new AutoClicker());
+        register(new ClickRecorder());
+        register(new FastPlace());
+        register(new Reach());
+        register(new AutoArmor());
     }
 
     private void register(Module module) {
