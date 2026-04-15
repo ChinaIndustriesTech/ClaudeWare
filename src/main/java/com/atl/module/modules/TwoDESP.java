@@ -26,7 +26,7 @@ import java.nio.IntBuffer;
 public class TwoDESP extends Module {
 
     private final Minecraft mc = Minecraft.getMinecraft();
-    
+
     private final float[] modelMatrix = new float[16];
     private final float[] projectionMatrix = new float[16];
     private final int[] viewport = new int[4];
@@ -55,7 +55,7 @@ public class TwoDESP extends Module {
         modelBuf.get(modelMatrix);
         projBuf.get(projectionMatrix);
         viewBuf.get(viewport, 0, 4);
-        
+
         matricesCaptured = true;
     }
 
@@ -74,7 +74,7 @@ public class TwoDESP extends Module {
 
         for (EntityPlayer player : mc.theWorld.playerEntities) {
             if (player == mc.thePlayer || player.isInvisible() || !player.isEntityAlive()) continue;
-            
+
             // AntiBot Check
             if (AntiBot.isBot(player)) continue;
 
@@ -84,7 +84,7 @@ public class TwoDESP extends Module {
 
             AxisAlignedBB bb = player.getEntityBoundingBox();
             if (bb == null) continue;
-            
+
             double height = bb.maxY - bb.minY;
             double width = (bb.maxX - bb.minX) / 2.0;
 
@@ -149,7 +149,7 @@ public class TwoDESP extends Module {
         GlStateManager.enableBlend();
         GlStateManager.disableDepth();
         GlStateManager.tryBlendFuncSeparate(770, 771, 1, 0);
-        
+
         GL11.glLineWidth(1.5f);
         GlStateManager.color(r, g, b, 1.0f);
         GL11.glBegin(GL11.GL_LINE_LOOP);

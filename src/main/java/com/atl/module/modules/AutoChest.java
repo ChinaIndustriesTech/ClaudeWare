@@ -15,21 +15,25 @@ import net.minecraft.util.ChatComponentText;
 import net.minecraft.util.EnumChatFormatting;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
-import java.util.ArrayList;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Random;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 public class AutoChest extends Module {
 
-    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
     private final Random random = new Random();
-    private static final int BASE_DELAY_MS = 50; // Base delay between actions
-    private static final int JITTER_MS = 100; // Max random additional delay
+
+    // Tick-based delays (1 tick = ~50ms at 20 TPS)
+    // Initial delay simulates the human reaction time after opening a chest
+    private static final int MIN_INITIAL_DELAY_TICKS = 1;
+    private static final int MAX_INITIAL_DELAY_TICKS = 1;
+
+    // Per-click delay simulates human hand movement between shift-clicks
+    private static final int MIN_CLICK_DELAY_TICKS = 1;
+    private static final int MAX_CLICK_DELAY_TICKS = 1;
 
     private final List<Item> itemsToMove = Arrays.asList(
             Items.iron_ingot,
@@ -40,7 +44,13 @@ public class AutoChest extends Module {
 
     private final BooleanSetting chestStealer = new BooleanSetting("ChestStealer", false);
 
-    private ContainerChest lastProcessedContainer = null;
+    // Tick-based state machine — no background threads
+    private ContainerChest activeContainer = null;
+    private List<Integer> pendingSlots = new ArrayList<>();
+    private int ticksUntilNextAction = 0;
+    private boolean initialized = false;
+    private boolean stealing = false;
+    private boolean pendingClose = false;
 
     public AutoChest() {
         super("AutoChest", "Automatically moves valuable items to opened chests", Category.MISC);
@@ -83,103 +93,166 @@ public class AutoChest extends Module {
         Minecraft mc = Minecraft.getMinecraft();
         if (mc.thePlayer == null || mc.theWorld == null) return;
 
-        // Check if we are currently looking at a chest GUI
-        if (mc.currentScreen instanceof GuiChest) {
-            if (mc.thePlayer.openContainer instanceof ContainerChest) {
-                ContainerChest container = (ContainerChest) mc.thePlayer.openContainer;
-
-                // Only trigger if this is a new chest we haven't touched yet
-                if (container != lastProcessedContainer) {
-                    lastProcessedContainer = container;
-
-                    List<Integer> playerValuables = findItemsToMove(mc, container);
-
-                    if (chestStealer.isEnabled() && playerValuables.isEmpty()) {
-                        List<Integer> chestValuables = findItemsToSteal(container);
-                        if (!chestValuables.isEmpty()) {
-                            scheduleItemMoves(mc, container, chestValuables, 0, 1);
-                        }
-                    } else if (!playerValuables.isEmpty()) {
-                        scheduleItemMoves(mc, container, playerValuables, 0, 0);
-                    }
-                }
+        if (!(mc.currentScreen instanceof GuiChest) || !(mc.thePlayer.openContainer instanceof ContainerChest)) {
+            if (activeContainer != null) {
+                resetState();
             }
-        } else {
-            // Reset the tracker when the GUI is closed
-            lastProcessedContainer = null;
-        }
-    }
-
-    private List<Integer> findItemsToMove(Minecraft mc, ContainerChest container) {
-        List<Integer> slotsToMove = new ArrayList<>();
-        // The chest's slots are typically at the beginning of the container's slots
-        // Player inventory slots start after the chest slots
-        int chestSlotsCount = container.getLowerChestInventory().getSizeInventory();
-
-        // Iterate through player's inventory slots (including hotbar)
-        // Player inventory slots are usually from chestSlotsCount to container.inventorySlots.size() - 1
-        for (int i = chestSlotsCount; i < container.inventorySlots.size(); i++) {
-            Slot slot = container.getSlot(i);
-            if (slot != null && slot.getHasStack()) {
-                ItemStack stack = slot.getStack();
-                if (itemsToMove.contains(stack.getItem())) {
-                    slotsToMove.add(i);
-                }
-            }
-        }
-        return slotsToMove;
-    }
-
-    private List<Integer> findItemsToSteal(ContainerChest container) {
-        List<Integer> slotsToMove = new ArrayList<>();
-        int chestSlotsCount = container.getLowerChestInventory().getSizeInventory();
-
-        // Iterate through the chest's inventory slots (top half of the GUI)
-        for (int i = 0; i < chestSlotsCount; i++) {
-            Slot slot = container.getSlot(i);
-            if (slot != null && slot.getHasStack()) {
-                ItemStack stack = slot.getStack();
-                if (itemsToMove.contains(stack.getItem())) {
-                    slotsToMove.add(i);
-                }
-            }
-        }
-        return slotsToMove;
-    }
-
-    private void scheduleItemMoves(Minecraft mc, ContainerChest container, List<Integer> slots, int index, int mouseButton) {
-        if (index >= slots.size()) {
             return;
         }
 
-        // Randomized delay between 50ms and 150ms for human emulation
-        int slotToMove = slots.get(index);
-        long delay = BASE_DELAY_MS + random.nextInt(JITTER_MS + 1);
-        boolean isStealing = (mouseButton == 1); // This boolean is now only for message formatting
+        ContainerChest container = (ContainerChest) mc.thePlayer.openContainer;
 
-        scheduler.schedule(() -> {
-            mc.addScheduledTask(() -> {
-                // Check if we should stop moving items
-                if (isEnabled() && mc.thePlayer != null && mc.thePlayer.openContainer == container) {
-                    ItemStack stackBeforeMove = container.getSlot(slotToMove).getStack();
+        if (container != activeContainer) {
+            resetState();
+            activeContainer = container;
+            // Randomized initial delay before the first click — critical for bypassing
+            // server-side checks that flag immediate post-open window clicks
+            ticksUntilNextAction = MIN_INITIAL_DELAY_TICKS;
+            return;
+        }
 
-                    mc.playerController.windowClick(container.windowId, slotToMove, 0, 1, mc.thePlayer); // Always Left-Click for Shift-Click
-                    
-                    if (stackBeforeMove != null && !container.getSlot(slotToMove).getHasStack()) {
-                        String direction = isStealing ? " from chest." : " to chest.";
-                        String action = isStealing ? "Stole " : "Moved ";
-                        sendMessage(EnumChatFormatting.GREEN + action + stackBeforeMove.getDisplayName() + direction);
-                    }
+        if (ticksUntilNextAction > 0) {
+            ticksUntilNextAction--;
+            return;
+        }
 
-                    // Only schedule the next move if the container is still valid
-                    scheduleItemMoves(mc, container, slots, index + 1, mouseButton);
-                }
-            });
-        }, delay, TimeUnit.MILLISECONDS);
+        if (!initialized) {
+            initialized = true;
+            prepareSlots(container);
+            if (pendingSlots.isEmpty()) {
+                closeChest(mc);
+                return;
+            }
+            ticksUntilNextAction = MIN_CLICK_DELAY_TICKS
+                    + random.nextInt(MAX_CLICK_DELAY_TICKS - MIN_CLICK_DELAY_TICKS + 1);
+            return;
+        }
+
+        if (pendingClose) {
+            closeChest(mc);
+            return;
+        }
+
+        if (pendingSlots.isEmpty()) return;
+
+        int slotIndex = pendingSlots.remove(0);
+
+        if (slotIndex >= container.inventorySlots.size()) {
+            scheduleNextClick();
+            return;
+        }
+
+        Slot slot = container.getSlot(slotIndex);
+
+        if (slot == null || !slot.getHasStack()) {
+            scheduleNextClick();
+            return;
+        }
+
+        // Copy stack info before the click for the chat message
+        ItemStack stack = slot.getStack().copy();
+
+        // Shift-click: button=0, mode=1 — identical to a player pressing Shift+Left Click
+        mc.playerController.windowClick(container.windowId, slotIndex, 0, 1, mc.thePlayer);
+
+        String action = stealing ? "Stole " : "Moved ";
+        String direction = stealing ? " from chest." : " to chest.";
+        sendMessage(EnumChatFormatting.GREEN + action + stack.getDisplayName() + direction);
+
+        if (pendingSlots.isEmpty()) {
+            pendingClose = true;
+            ticksUntilNextAction = MIN_CLICK_DELAY_TICKS
+                    + random.nextInt(MAX_CLICK_DELAY_TICKS - MIN_CLICK_DELAY_TICKS + 1);
+        } else {
+            scheduleNextClick();
+        }
+    }
+
+    private void prepareSlots(ContainerChest container) {
+        List<Integer> playerValuables = findPlayerValuables(container);
+
+        if (!playerValuables.isEmpty()) {
+            stealing = false;
+            pendingSlots = playerValuables;
+        } else if (chestStealer.isEnabled()) {
+            List<Integer> chestValuables = findChestValuables(container);
+            if (!chestValuables.isEmpty()) {
+                stealing = true;
+                pendingSlots = chestValuables;
+            }
+        }
+
+        // Slight shuffle to avoid perfectly sequential slot order, which looks robotic
+        if (pendingSlots.size() > 2) {
+            shuffleSlightly(pendingSlots);
+        }
+    }
+
+    private void scheduleNextClick() {
+        ticksUntilNextAction = MIN_CLICK_DELAY_TICKS
+                + random.nextInt(MAX_CLICK_DELAY_TICKS - MIN_CLICK_DELAY_TICKS + 1);
+    }
+
+    private void closeChest(Minecraft mc) {
+        mc.thePlayer.closeScreen();
+        resetState();
+    }
+
+    private void resetState() {
+        activeContainer = null;
+        pendingSlots.clear();
+        ticksUntilNextAction = 0;
+        initialized = false;
+        stealing = false;
+        pendingClose = false;
+    }
+
+    private List<Integer> findPlayerValuables(ContainerChest container) {
+        List<Integer> slots = new ArrayList<>();
+        int chestSize = container.getLowerChestInventory().getSizeInventory();
+
+        for (int i = chestSize; i < container.inventorySlots.size(); i++) {
+            Slot slot = container.getSlot(i);
+            if (slot != null && slot.getHasStack() && itemsToMove.contains(slot.getStack().getItem())) {
+                slots.add(i);
+            }
+        }
+        return slots;
+    }
+
+    private List<Integer> findChestValuables(ContainerChest container) {
+        List<Integer> slots = new ArrayList<>();
+        int chestSize = container.getLowerChestInventory().getSizeInventory();
+
+        for (int i = 0; i < chestSize; i++) {
+            Slot slot = container.getSlot(i);
+            if (slot != null && slot.getHasStack() && itemsToMove.contains(slot.getStack().getItem())) {
+                slots.add(i);
+            }
+        }
+        return slots;
+    }
+
+    /**
+     * Lightly shuffles a list by swapping a small number of adjacent pairs.
+     * This avoids perfectly linear slot iteration (bot-like) without being
+     * so random it looks unnatural.
+     */
+    private void shuffleSlightly(List<Integer> slots) {
+        int swaps = 1 + random.nextInt(Math.max(1, slots.size() / 3));
+        for (int i = 0; i < swaps; i++) {
+            int a = random.nextInt(slots.size() - 1);
+            Collections.swap(slots, a, a + 1);
+        }
     }
 
     private void sendMessage(String message) {
-        Minecraft mc = Minecraft.getMinecraft(); // Lazy load mc here too
-        mc.thePlayer.addChatMessage(new ChatComponentText(EnumChatFormatting.GRAY + "[" + EnumChatFormatting.LIGHT_PURPLE + "AutoChest" + EnumChatFormatting.GRAY + "] " + EnumChatFormatting.RESET + message));
+        Minecraft mc = Minecraft.getMinecraft();
+        mc.thePlayer.addChatMessage(new ChatComponentText(
+                EnumChatFormatting.GRAY + "[" +
+                        EnumChatFormatting.LIGHT_PURPLE + "AutoChest" +
+                        EnumChatFormatting.GRAY + "] " +
+                        EnumChatFormatting.RESET + message
+        ));
     }
 }
