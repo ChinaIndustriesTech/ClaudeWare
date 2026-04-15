@@ -1,9 +1,11 @@
 package com.atl.module.modules;
 
+import com.atl.module.management.BooleanSetting;
 import com.atl.module.management.Category;
 import com.atl.module.management.Module;
 import com.google.gson.JsonObject;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Gui;
 import net.minecraft.client.gui.ScaledResolution;
 import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.renderer.entity.RenderManager;
@@ -20,6 +22,9 @@ import org.lwjgl.util.vector.Matrix4f;
 import org.lwjgl.util.vector.Vector3f;
 import org.lwjgl.util.vector.Vector4f;
 
+import java.awt.Color;
+import java.util.Arrays;
+import java.util.List;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 
@@ -36,8 +41,40 @@ public class TwoDESP extends Module {
     private final FloatBuffer projBuf = BufferUtils.createFloatBuffer(16);
     private final IntBuffer viewBuf = BufferUtils.createIntBuffer(16);
 
+    public BooleanSetting healthBar = new BooleanSetting("Health Bar", true);
+    public BooleanSetting healthNumber = new BooleanSetting("Health Number", true);
+
     public TwoDESP() {
         super("2DESP", "esp but 2d", Category.RENDER);
+        addSettings(healthBar, healthNumber);
+    }
+
+    @Override
+    public void loadSettings(JsonObject settings) {
+        if (settings.has("healthBar")) healthBar.enabled = settings.get("healthBar").getAsBoolean();
+        if (settings.has("healthNumber")) healthNumber.enabled = settings.get("healthNumber").getAsBoolean();
+    }
+
+    @Override
+    public JsonObject saveSettings() {
+        JsonObject settings = new JsonObject();
+        settings.addProperty("healthBar", healthBar.enabled);
+        settings.addProperty("healthNumber", healthNumber.enabled);
+        return settings;
+    }
+
+    @Override
+    public List<String> getSettings() {
+        return Arrays.asList(
+                "healthBar: " + healthBar.enabled,
+                "healthNumber: " + healthNumber.enabled
+        );
+    }
+
+    private int getHealthColor(float hp, float maxHp) {
+        float ratio = hp / maxHp;
+        // Transitions from Green (0.33) to Red (0.0) in HSB space
+        return Color.HSBtoRGB(Math.max(0f, Math.min(ratio, 1f)) / 3.0f, 1.0f, 1.0f);
     }
 
     @SubscribeEvent
@@ -119,6 +156,37 @@ public class TwoDESP extends Module {
             if (anyOnScreen) {
                 int color = getTeamColor(player);
                 draw2DBox(minX, minY, maxX, maxY, color);
+
+                if (healthBar.enabled) {
+                    float hp = player.getHealth();
+                    float maxHp = player.getMaxHealth();
+                    if (hp > maxHp) hp = maxHp;
+
+                    double hpPercentage = hp / maxHp;
+                    float h = maxY - minY;
+                    float hpHeight = (float) (h * hpPercentage);
+
+                    int healthColor = getHealthColor(hp, maxHp);
+
+                    // Draw Background (1 pixel wide, offset 2px from box)
+                    Gui.drawRect((int) minX - 3, (int) minY - 1, (int) minX - 2, (int) maxY + 1, 0x90000000);
+                    
+                    // Draw Health Bar
+                    Gui.drawRect((int) minX - 3, (int) maxY, (int) minX - 2, (int) (maxY - hpHeight), healthColor);
+
+                    float absAmount = player.getAbsorptionAmount();
+                    if (absAmount > 0) {
+                        // Draw golden absorption overlay (always incorporated if present)
+                        Gui.drawRect((int) minX - 3, (int) maxY, (int) minX - 2, (int) (maxY - (h / 6.0f) * (absAmount / 2.0f)), new Color(255, 215, 0, 150).getRGB());
+                    }
+
+                    if (healthNumber.enabled) {
+                        String hpText = (int) (hp + absAmount) + "§c❤";
+                        float textX = minX - 4 - mc.fontRendererObj.getStringWidth(hpText);
+                        float textY = (float) (maxY - hpHeight - (mc.fontRendererObj.FONT_HEIGHT / 2.0f));
+                        mc.fontRendererObj.drawStringWithShadow(hpText, textX, textY, -1);
+                    }
+                }
             }
         }
     }

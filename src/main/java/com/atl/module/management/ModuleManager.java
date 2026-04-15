@@ -16,7 +16,6 @@ public class ModuleManager {
         register(new AutoTool());
         register(new Sprint());
         register(new FullBright());
-        register(new PlayerTracker());
         register(new SprintReset());
         register(new BedTracker());
         register(new ItemESP());
