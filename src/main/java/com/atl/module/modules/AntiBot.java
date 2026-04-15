@@ -12,11 +12,11 @@ import java.util.List;
 
 public class AntiBot extends Module {
 
-    private static final Minecraft mc = Minecraft.getMinecraft();
     private static AntiBot instance;
     
     private static boolean tabCheck = true;
     private static boolean idCheck = true;
+    private static boolean pingCheck = true;
 
     public AntiBot() {
         super("AntiBot", "", Category.MISC);
@@ -31,6 +31,7 @@ public class AntiBot extends Module {
     public void loadSettings(JsonObject settings) {
         if (settings.has("tabCheck")) tabCheck = settings.get("tabCheck").getAsBoolean();
         if (settings.has("idCheck")) idCheck = settings.get("idCheck").getAsBoolean();
+        if (settings.has("pingCheck")) pingCheck = settings.get("pingCheck").getAsBoolean();
     }
 
     @Override
@@ -38,6 +39,7 @@ public class AntiBot extends Module {
         JsonObject settings = new JsonObject();
         settings.addProperty("tabCheck", tabCheck);
         settings.addProperty("idCheck", idCheck);
+        settings.addProperty("pingCheck", pingCheck);
         return settings;
     }
 
@@ -51,6 +53,9 @@ public class AntiBot extends Module {
         } else if (setting.equals("idcheck")) {
             idCheck = Boolean.parseBoolean(parts[3]);
             return true;
+        } else if (setting.equals("pingcheck")) {
+            pingCheck = Boolean.parseBoolean(parts[3]);
+            return true;
         }
         return false;
     }
@@ -59,7 +64,8 @@ public class AntiBot extends Module {
     public List<String> getSettings() {
         return Arrays.asList(
                 "tabCheck (true/false) - Current: " + tabCheck,
-                "idCheck (true/false) - Current: " + idCheck
+                "idCheck (true/false) - Current: " + idCheck,
+                "pingCheck (true/false) - Current: " + pingCheck
         );
     }
 
@@ -71,15 +77,19 @@ public class AntiBot extends Module {
         // If AntiBot is disabled, nothing is considered a bot
         if (instance == null || !instance.isEnabled()) return false;
 
-        // 1. Tab List Check (Most reliable for Hypixel)
-        if (tabCheck) {
-            NetworkPlayerInfo info = mc.getNetHandler().getPlayerInfo(player.getUniqueID());
-            if (info == null) return true;
+        // 1. Network/Tab Checks
+        if (tabCheck || pingCheck) {
+            if (Minecraft.getMinecraft().getNetHandler() == null) return false;
+            NetworkPlayerInfo info = Minecraft.getMinecraft().getNetHandler().getPlayerInfo(player.getUniqueID());
+            
+            if (tabCheck && info == null) return true;
+            // 0 Ping check (Common bot indicator)
+            if (pingCheck && info != null && info.getResponseTime() == 0) return true;
         }
 
-        // 2. High ID Check (Bots often have IDs > 1,000,000)
+        // 2. low ID Check (Bots often have IDs <= 0>)
         if (idCheck) {
-            if (player.getEntityId() >= 1000000) return true;
+            if (player.getEntityId() <= 0 ) return true;
         }
 
         // 3. Basic validity checks

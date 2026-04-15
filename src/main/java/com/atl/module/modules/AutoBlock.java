@@ -1,10 +1,10 @@
 package com.atl.module.modules;
 
-import com.atl.mixin.IMinecraft;
 import com.atl.module.management.Category;
 import com.atl.module.management.Module;
 import com.atl.module.management.NumberSetting;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.network.NetworkPlayerInfo;
 import net.minecraft.client.settings.KeyBinding;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.item.ItemSword;
@@ -27,7 +27,7 @@ public class AutoBlock extends Module {
     private final Random random = new Random();
 
     public AutoBlock() {
-        super("AutoBlock", "BROKEN DONT USE", Category.COMBAT);
+        super("AutoBlock", "blocks for you sometimes", Category.COMBAT);
         addSettings(range, blockDuration);
     }
 
@@ -48,8 +48,9 @@ public class AutoBlock extends Module {
 
         // 3. Rotational Check (Dot Product)
         if (isEntityFacingMe(opponent)) {
+            int threshold = getHurtTimeThreshold();
             // If we have high invincibility, queue the block for later
-            if (mc.thePlayer.hurtTime > 1) {
+            if (mc.thePlayer.hurtTime > threshold) {
                 pendingBlock = true;
             } else {
                 block(mc);
@@ -66,14 +67,16 @@ public class AutoBlock extends Module {
 
         long currentTime = System.currentTimeMillis();
 
+        int threshold = getHurtTimeThreshold();
+
         // Handle HurtTime logic: Release block during high invincibility
-        if (mc.thePlayer.hurtTime > 1) {
+        if (mc.thePlayer.hurtTime > threshold) {
             blockEndTime = 0; // Force release
         }
 
         // Trigger pending block right before hurtTime expires (hurtTime 1 = ~50ms left)
         // Jitter added: 50ms (the tick) +/- ~30ms via small logic variations
-        if (pendingBlock && mc.thePlayer.hurtTime <= 1) {
+        if (pendingBlock && mc.thePlayer.hurtTime <= threshold) {
             block(mc);
             pendingBlock = false;
         }
@@ -87,6 +90,17 @@ public class AutoBlock extends Module {
             KeyBinding.setKeyBindState(bind, Mouse.isButtonDown(1));
             blockEndTime = 0;
         }
+    }
+
+    private int getHurtTimeThreshold() {
+        Minecraft mc = Minecraft.getMinecraft();
+        if (mc.getNetHandler() == null || mc.thePlayer == null) return 1;
+        
+        NetworkPlayerInfo info = mc.getNetHandler().getPlayerInfo(mc.thePlayer.getUniqueID());
+        int ping = (info != null) ? info.getResponseTime() : 0;
+
+        // Compares latency to game ticks (50ms). Cap to 4 to avoid staying blocked too long.
+        return 1 + Math.min(3, ping / 100);
     }
 
     private boolean isEntityFacingMe(EntityPlayer opponent) {
@@ -109,9 +123,11 @@ public class AutoBlock extends Module {
     }
 
     private void block(Minecraft mc) {
-        IMinecraft imc = (IMinecraft) mc;
-        imc.setRightClickDelayTimer(0);
-        imc.invokeRightClickMouse();
+        // Get the keycode for the 'Use Item' (Right Click) bind
+        int useKey = mc.gameSettings.keyBindUseItem.getKeyCode();
+        
+        // Trigger a single "tick" of the keypress logic
+        KeyBinding.onTick(useKey);
         
         // Set the timer for how long we should hold the block
         this.blockEndTime = System.currentTimeMillis() + (long) blockDuration.value;

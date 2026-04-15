@@ -215,11 +215,6 @@ public class AutoClicker extends Module {
         if (recorded.isEnabled() && !recordedDelays.isEmpty()) {
             ClickData data = recordedDelays.get(currentRecordIndex);
             
-            // Ensure recorded intervals do not drop below 5 CPS
-            if (data.interval > 200) {
-                data.interval = 200;
-            }
-
             nextClickTime = referenceTime + data.interval;
             currentRecordedGap = data.gap;
             

@@ -90,14 +90,20 @@ public class AutoArmor extends Module {
     private float getArmorScore(ItemStack stack) {
         if (stack == null || !(stack.getItem() instanceof ItemArmor)) return -1;
         ItemArmor armor = (ItemArmor) stack.getItem();
-        
-        float score = (float) armor.damageReduceAmount;
-        
-        // Add weight for Protection enchantment (standard in 1.8.9)
-        int protLevel = EnchantmentHelper.getEnchantmentLevel(Enchantment.protection.effectId, stack);
-        score += (float) protLevel * 0.25f;
-        
-        return score;
+
+        double score = 0;
+
+        // Base protection + non-linear Protection enchantment scaling
+        score += armor.damageReduceAmount + (100 - armor.damageReduceAmount) * EnchantmentHelper.getEnchantmentLevel(Enchantment.protection.effectId, stack) * 0.0075D;
+
+        // Weighted values for specialized enchantments
+        score += EnchantmentHelper.getEnchantmentLevel(Enchantment.blastProtection.effectId, stack) / 100d;
+        score += EnchantmentHelper.getEnchantmentLevel(Enchantment.fireProtection.effectId, stack) / 100d;
+        score += EnchantmentHelper.getEnchantmentLevel(Enchantment.thorns.effectId, stack) / 100d;
+        score += EnchantmentHelper.getEnchantmentLevel(Enchantment.unbreaking.effectId, stack) / 50d;
+        score += EnchantmentHelper.getEnchantmentLevel(Enchantment.projectileProtection.effectId, stack) / 100d;
+
+        return (float) score;
     }
 
     private void clickSlot(int slot, int button, int mode) {
