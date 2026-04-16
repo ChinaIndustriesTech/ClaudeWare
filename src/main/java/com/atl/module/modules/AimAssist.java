@@ -79,6 +79,14 @@ public class AimAssist extends Module {
         float targetYawDelta = (float) (yawDiff * (hSpeed.value / 10.0F) * randomSpeed * proximityMultiplier);
         float targetPitchDelta = (float) (pitchDiff * (vSpeed.value / 10.0F) * randomSpeed * proximityMultiplier);
 
+        // Cross-Axis Jitter: Humans cannot move a mouse in a perfectly straight 1D line.
+        // We remove the conditional guards to ensure that if the module is tracking, 
+        // both axes always receive noise. This forces 2D movement even if the initial delta is 0.
+        // We use a factor of 0.8 * gcd to ensure the jitter is strong enough to occasionally 
+        // trigger a rounding change, making the "straight line" look imperfect to the server.
+        targetPitchDelta += (float) ((Math.random() - 0.5) * gcd * 0.8);
+        targetYawDelta += (float) ((Math.random() - 0.5) * gcd * 0.8);
+
         // The GCD Fix: Round the delta to the nearest sensitivity step
         targetYawDelta = Math.round(targetYawDelta / gcd) * gcd;
         targetPitchDelta = Math.round(targetPitchDelta / gcd) * gcd;

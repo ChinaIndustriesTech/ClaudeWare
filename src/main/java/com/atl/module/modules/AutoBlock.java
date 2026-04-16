@@ -60,17 +60,18 @@ public class AutoBlock extends Module {
 
     @SubscribeEvent
     public void onTick(TickEvent.ClientTickEvent event) {
-        if (event.phase != TickEvent.Phase.END) return;
+        if (event.phase != TickEvent.Phase.START) return;
         
         Minecraft mc = Minecraft.getMinecraft();
         if (mc.thePlayer == null || !isEnabled()) return;
 
         long currentTime = System.currentTimeMillis();
-
         int threshold = getHurtTimeThreshold();
+        int bind = mc.gameSettings.keyBindUseItem.getKeyCode();
 
         // Handle HurtTime logic: Release block during high invincibility
-        if (mc.thePlayer.hurtTime > threshold) {
+        if (mc.thePlayer.hurtTime > threshold && blockEndTime != 0) {
+            KeyBinding.setKeyBindState(bind, false);
             blockEndTime = 0; // Force release
         }
 
@@ -82,12 +83,11 @@ public class AutoBlock extends Module {
         }
 
         // Maintain or release the block state
-        int bind = mc.gameSettings.keyBindUseItem.getKeyCode();
         if (currentTime < blockEndTime) {
             KeyBinding.setKeyBindState(bind, true);
         } else if (blockEndTime != 0) {
-            // Only release if the user isn't manually holding right click
-            KeyBinding.setKeyBindState(bind, Mouse.isButtonDown(1));
+            // Explicitly force an unblock regardless of manual input to reset the animation
+            KeyBinding.setKeyBindState(bind, false);
             blockEndTime = 0;
         }
     }

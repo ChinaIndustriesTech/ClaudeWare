@@ -1,105 +1,133 @@
 package com.atl.module.modules;
 
-import com.atl.mixin.IMinecraft;
 import com.atl.module.management.BooleanSetting;
 import com.atl.module.management.Category;
 import com.atl.module.management.Module;
 import com.atl.module.management.NumberSetting;
 import com.google.gson.JsonObject;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.entity.EntityPlayerSP;
 import net.minecraft.client.settings.KeyBinding;
 import net.minecraft.entity.EntityLivingBase;
-import net.minecraft.entity.player.EntityPlayer;
-import net.minecraft.item.*;
 import net.minecraft.util.MovingObjectPosition;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
 import org.lwjgl.input.Mouse;
 
-import java.io.*;
-import java.util.*;
-import java.util.concurrent.ThreadLocalRandom;
+import java.security.SecureRandom;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Random;
 
 public class AutoClicker extends Module {
 
-    private static class ClickData {
-        long interval;
-        long gap;
+    private static final Minecraft mc = Minecraft.getMinecraft();
 
-        ClickData(long interval, long gap) { this.interval = interval; this.gap = gap; }
-    }
+    // Settings
+    private final BooleanSetting jitterMode    = new BooleanSetting("Jitter",      true);
+    private final BooleanSetting hypixelMode   = new BooleanSetting("Hypixel",     false);
+    private final BooleanSetting dragMode      = new BooleanSetting("Drag",        false);
+    private final BooleanSetting blatantMode   = new BooleanSetting("Blatant",     false);
+    private final BooleanSetting customMode    = new BooleanSetting("Custom",      false);
 
-    private final Minecraft mc = Minecraft.getMinecraft();
-    
-    private final NumberSetting targetCps = new NumberSetting("Average CPS", 10, 1, 20, 1);
-    private final BooleanSetting butterfly = new BooleanSetting("Butterfly", false);
-    private final BooleanSetting exhaustion = new BooleanSetting("Exhaustion", true);
-    private final BooleanSetting recorded = new BooleanSetting("Recorded", false);
-    // Newly added settings from your provided code
-    private final BooleanSetting weaponsOnly = new BooleanSetting("Weapons Only", false);
-    private final BooleanSetting breakBlocks = new BooleanSetting("Break Blocks", true);
+    private final BooleanSetting hitSelect     = new BooleanSetting("HitSelect",   false);
+    private final NumberSetting  hitSelectTick = new NumberSetting("HitSelect Tick", 5, 1, 7, 1);
 
-    private long nextClickTime;
-    private long sessionStartTime;
-    private long exhaustionStartTime;
-    private boolean isExhausted;
-    private boolean isClicking;
-    private boolean secondButterflyClick = false;
-    private long lastFastDelay;
-    private double currentFluctuation;
+    private final BooleanSetting triggerBot    = new BooleanSetting("TriggerBot",  false);
 
-    // Playback logic
-    private final List<ClickData> recordedDelays = new ArrayList<>();
-    private int currentRecordIndex = 0;
-    private String currentRecordingName = "none";
-    private long currentRecordedGap = 0;
+    private final NumberSetting  dragLength    = new NumberSetting("Drag Length",  5,  1, 30, 1);
+    private final NumberSetting  dragDelay     = new NumberSetting("Drag Delay",   1,  1, 20, 1);
+
+    private final NumberSetting  customMin     = new NumberSetting("Custom Min",   17, 0, 1000, 1);
+    private final NumberSetting  customMax     = new NumberSetting("Custom Max",   50, 0, 1000, 1);
+    private final BooleanSetting customSmart   = new BooleanSetting("Custom Smart", true);
+
+    // Drag state
+    private int nextDragLength = 0, nextDragDelay = 0;
+
+    // Hypixel (butterfly) state
+    private int nextButterflyLength = 0, nextButterflyDelay = 0;
+
+    // Blatant state
+    private int nextBlatantLength = 0, nextBlatantDelay = 0;
+    private int blatantBoost = 0;
+    private long lastBlatantCpsCheck = 0;
+    private int blatantClickCount = 0;
+    private long blatantWindowStart = 0;
+
+    // Jitter state
+    private long lastJitterClick = 0;
+
+    // Custom state
+    private long customLastClick = 0;
+    private long customRandomDelay = 100L;
+
+    // Blatant timer
+    private long blatantTimer = 0;
+    private long dragTimer = 0;
 
     public AutoClicker() {
-        super("AutoClicker", "Automatically clicks while holding Left Click", Category.COMBAT);
-        addSettings(targetCps, butterfly, exhaustion, recorded, weaponsOnly, breakBlocks);
+        super("AutoClicker", "Automatically clicks for you", Category.COMBAT);
+        addSettings(
+                jitterMode, hypixelMode, dragMode, blatantMode, customMode,
+                hitSelect, hitSelectTick, triggerBot,
+                dragLength, dragDelay,
+                customMin, customMax, customSmart
+        );
     }
 
     @Override
-    public void loadSettings(JsonObject settings) {
-        if (settings.has("cps")) targetCps.setValue(settings.get("cps").getAsDouble());
-        if (settings.has("butterfly")) butterfly.enabled = settings.get("butterfly").getAsBoolean();
-        if (settings.has("exhaustion")) exhaustion.enabled = settings.get("exhaustion").getAsBoolean();
-        if (settings.has("recorded")) recorded.enabled = settings.get("recorded").getAsBoolean();
-        if (settings.has("weaponsOnly")) weaponsOnly.enabled = settings.get("weaponsOnly").getAsBoolean();
-        if (settings.has("breakBlocks")) breakBlocks.enabled = settings.get("breakBlocks").getAsBoolean();
-        if (settings.has("recordingName")) {
-            currentRecordingName = settings.get("recordingName").getAsString();
-            loadRecording(currentRecordingName);
-        }
+    public void loadSettings(JsonObject s) {
+        if (s.has("jitter"))       jitterMode.enabled    = s.get("jitter").getAsBoolean();
+        if (s.has("hypixel"))      hypixelMode.enabled   = s.get("hypixel").getAsBoolean();
+        if (s.has("drag"))         dragMode.enabled      = s.get("drag").getAsBoolean();
+        if (s.has("blatant"))      blatantMode.enabled   = s.get("blatant").getAsBoolean();
+        if (s.has("custom"))       customMode.enabled    = s.get("custom").getAsBoolean();
+        if (s.has("hitSelect"))    hitSelect.enabled     = s.get("hitSelect").getAsBoolean();
+        if (s.has("hitSelectTick"))hitSelectTick.value   = s.get("hitSelectTick").getAsDouble();
+        if (s.has("triggerBot"))   triggerBot.enabled    = s.get("triggerBot").getAsBoolean();
+        if (s.has("dragLength"))   dragLength.value      = s.get("dragLength").getAsDouble();
+        if (s.has("dragDelay"))    dragDelay.value       = s.get("dragDelay").getAsDouble();
+        if (s.has("customMin"))    customMin.value       = s.get("customMin").getAsDouble();
+        if (s.has("customMax"))    customMax.value       = s.get("customMax").getAsDouble();
+        if (s.has("customSmart"))  customSmart.enabled   = s.get("customSmart").getAsBoolean();
     }
 
     @Override
     public JsonObject saveSettings() {
-        JsonObject settings = new JsonObject();
-        settings.addProperty("cps", targetCps.value);
-        settings.addProperty("butterfly", butterfly.enabled);
-        settings.addProperty("exhaustion", exhaustion.enabled);
-        settings.addProperty("recorded", recorded.enabled);
-        settings.addProperty("weaponsOnly", weaponsOnly.enabled);
-        settings.addProperty("breakBlocks", breakBlocks.enabled);
-        settings.addProperty("recordingName", currentRecordingName);
-        return settings;
+        JsonObject s = new JsonObject();
+        s.addProperty("jitter",        jitterMode.enabled);
+        s.addProperty("hypixel",       hypixelMode.enabled);
+        s.addProperty("drag",          dragMode.enabled);
+        s.addProperty("blatant",       blatantMode.enabled);
+        s.addProperty("custom",        customMode.enabled);
+        s.addProperty("hitSelect",     hitSelect.enabled);
+        s.addProperty("hitSelectTick", hitSelectTick.value);
+        s.addProperty("triggerBot",    triggerBot.enabled);
+        s.addProperty("dragLength",    dragLength.value);
+        s.addProperty("dragDelay",     dragDelay.value);
+        s.addProperty("customMin",     customMin.value);
+        s.addProperty("customMax",     customMax.value);
+        s.addProperty("customSmart",   customSmart.enabled);
+        return s;
     }
 
     @Override
     public boolean handleSetCommand(String[] parts) {
-        if (parts.length < 3) return false;
-        String setting = parts[2].toLowerCase();
-        if (setting.equals("cps")) {
-            targetCps.setValue(Double.parseDouble(parts[3]));
-            return true;
-        }
-        if (setting.equals("record")) {
-            if (parts.length < 4) return false;
-            currentRecordingName = parts[3];
-            loadRecording(currentRecordingName);
-            return true;
+        if (parts.length < 4) return false;
+        switch (parts[2].toLowerCase()) {
+            case "jitter":       jitterMode.enabled    = Boolean.parseBoolean(parts[3]); return true;
+            case "hypixel":      hypixelMode.enabled   = Boolean.parseBoolean(parts[3]); return true;
+            case "drag":         dragMode.enabled      = Boolean.parseBoolean(parts[3]); return true;
+            case "blatant":      blatantMode.enabled   = Boolean.parseBoolean(parts[3]); return true;
+            case "custom":       customMode.enabled    = Boolean.parseBoolean(parts[3]); return true;
+            case "hitselect":    hitSelect.enabled     = Boolean.parseBoolean(parts[3]); return true;
+            case "hitselecttick":hitSelectTick.setValue(Double.parseDouble(parts[3]));   return true;
+            case "triggerbot":   triggerBot.enabled    = Boolean.parseBoolean(parts[3]); return true;
+            case "draglength":   dragLength.setValue(Double.parseDouble(parts[3]));      return true;
+            case "dragdelay":    dragDelay.setValue(Double.parseDouble(parts[3]));       return true;
+            case "custommin":    customMin.setValue(Double.parseDouble(parts[3]));       return true;
+            case "custommax":    customMax.setValue(Double.parseDouble(parts[3]));       return true;
+            case "customsmart":  customSmart.enabled   = Boolean.parseBoolean(parts[3]); return true;
         }
         return false;
     }
@@ -107,239 +135,266 @@ public class AutoClicker extends Module {
     @Override
     public List<String> getSettings() {
         return Arrays.asList(
-            "cps (1-20) - Current: " + targetCps.value,
-            "butterfly (true/false) - Current: " + butterfly.enabled,
-            "exhaustion (true/false) - Current: " + exhaustion.enabled,
-            "recorded (true/false) - Current: " + recorded.enabled,
-            "record [name] - File: " + currentRecordingName
+                "jitter (true/false) - " + jitterMode.enabled,
+                "hypixel (true/false) - " + hypixelMode.enabled,
+                "drag (true/false) - " + dragMode.enabled,
+                "blatant (true/false) - " + blatantMode.enabled,
+                "custom (true/false) - " + customMode.enabled,
+                "hitSelect (true/false) - " + hitSelect.enabled,
+                "hitSelectTick (1-7) - " + (int) hitSelectTick.value,
+                "triggerBot (true/false) - " + triggerBot.enabled,
+                "dragLength (1-30) - " + (int) dragLength.value,
+                "dragDelay (1-20) - " + (int) dragDelay.value,
+                "customMin (0-1000) - " + (int) customMin.value,
+                "customMax (0-1000) - " + (int) customMax.value,
+                "customSmart (true/false) - " + customSmart.enabled
         );
     }
 
-    @Override
-    public void onEnable() {
-        sessionStartTime = System.currentTimeMillis();
-        isExhausted = false;
-        nextClickTime = 0;
-        secondButterflyClick = false;
-        currentFluctuation = 0;
-        
-        if (recorded.isEnabled() && !recordedDelays.isEmpty()) {
-            currentRecordIndex = ThreadLocalRandom.current().nextInt(recordedDelays.size());
-        }
-    }
-
     @SubscribeEvent
-    public void onRenderTick(TickEvent.RenderTickEvent event) {
-        // Using RenderTickEvent for higher precision and smoother high-CPS clicking
-        if (!isEnabled() || mc.thePlayer == null || mc.currentScreen != null || event.phase != TickEvent.Phase.START) {
-            return;
-        }
+    public void onTick(TickEvent.ClientTickEvent event) {
+        if (!isEnabled() || event.phase != TickEvent.Phase.START) return;
+        if (mc.thePlayer == null || mc.theWorld == null || mc.currentScreen != null) return;
 
-        // Validate if we can actually click based on the new filters
-        boolean canClick = canClick();
-
-        // Only click if the physical Left Click (Button 0) is held down AND filters allow it
-        if (!Mouse.isButtonDown(0) || !canClick) {
-            sessionStartTime = System.currentTimeMillis();
-            isExhausted = false;
-            secondButterflyClick = false;
-            
-            // Pick a random starting point for the next session
-            if (recorded.isEnabled() && !recordedDelays.isEmpty()) {
-                currentRecordIndex = ThreadLocalRandom.current().nextInt(recordedDelays.size());
-            }
-            
-            releaseClick();
-            return;
-        }
-
-        long now = System.currentTimeMillis();
-
-        // 1. Fatigue / Exhaustion Logic
-        if (exhaustion.isEnabled()) {
-            if (isExhausted) {
-                if (now - exhaustionStartTime > 1500) { // 1.5 second pause
-                    isExhausted = false;
-                    sessionStartTime = now;
-                }
-                // We no longer return here; we allow clicking to continue at a reduced rate
-            } else if (now - sessionStartTime > 8000) { // Exhaust after 8 seconds (higher frequency)
-                isExhausted = true;
-                exhaustionStartTime = now;
+        if (triggerBot.enabled) {
+            if (mc.objectMouseOver == null
+                    || mc.objectMouseOver.typeOfHit == null
+                    || mc.objectMouseOver.entityHit == null
+                    || mc.objectMouseOver.typeOfHit != MovingObjectPosition.MovingObjectType.ENTITY) {
+                return;
             }
         }
 
-        // 2. Click Pacing Logic
-        if (now >= nextClickTime) {
-            doClick();
-
-            // Sync the timer if we are starting fresh or lagging significantly (>150ms)
-            // This prevents the "burst" and ensures the clicker doesn't stall.
-            if (nextClickTime == 0 || (now - nextClickTime) > 200) nextClickTime = now;
-
-            generateNextDelay(nextClickTime);
-        } else if (isClicking && now > (nextClickTime - getReleaseDelay())) {
-            // Simulates a human-like hold time (duty cycle)
-            releaseClick();
-        }
+        if (blatantMode.enabled)  { blatantClick(); return; }
+        if (dragMode.enabled)     { dragClick();    return; }
+        if (hypixelMode.enabled)  { hypixelClick(); return; }
+        if (customMode.enabled)   { customClick();  return; }
+        if (jitterMode.enabled)   { jitterClick();  return; }
     }
 
-    private boolean canClick() {
-        if (mc.currentScreen != null) return false;
+    // -------------------------------------------------------------------------
+    // Click modes
+    // -------------------------------------------------------------------------
 
-        // Filter by item type
-        if (weaponsOnly.isEnabled() && !isHoldingSword()) {
-            return false;
-        }
+    private void jitterClick() {
+        try {
+            if (hitSelectBlocked()) return;
 
-        // Block interaction logic
-        if (mc.objectMouseOver != null && mc.objectMouseOver.typeOfHit == MovingObjectPosition.MovingObjectType.BLOCK) {
-            // If breakBlocks is on, we stop clicking unless there is a valid entity target nearby
-            if (breakBlocks.isEnabled()) {
-                return hasValidTarget();
-            }
-        }
+            double min = 69 * Math.random() / 42 * 4.25 / 2;
+            double max = 69 * Math.random() / 42 * 6.94 * 2;
+            double randomizer = 17 - (max * Math.random() * Math.asin(Math.atan(69.0 / 42))) + min - 17.22 / 5.11 * (8 * Math.random());
 
-        return true;
-    }
-
-    private boolean isHoldingSword() {
-        ItemStack stack = mc.thePlayer.getHeldItem();
-        return stack != null && stack.getItem() instanceof ItemSword;
-    }
-
-    private boolean hasValidTarget() {
-        // Check if we are currently looking at an entity (even through blocks if using Reach/Aura)
-        if (mc.objectMouseOver != null && mc.objectMouseOver.typeOfHit == MovingObjectPosition.MovingObjectType.ENTITY) {
-            if (mc.objectMouseOver.entityHit instanceof EntityLivingBase) {
-                EntityLivingBase target = (EntityLivingBase) mc.objectMouseOver.entityHit;
-                // Ignore dead entities
-                return target.deathTime <= 0;
-            }
-        }
-        return false;
-    }
-
-    private void doClick() {
-        int key = mc.gameSettings.keyBindAttack.getKeyCode();
-        
-        // Resetting the leftClickCounter allows the attack to register even if the 
-        // game thinks we just swung, mirroring how hardware input overrides timers.
-        ((IMinecraft) mc).setLeftClickCounter(0);
-        
-        KeyBinding.setKeyBindState(key, true);
-        KeyBinding.onTick(key); // Triggers standard Minecraft attack logic
-        isClicking = true;
-    }
-
-    private void releaseClick() {
-        if (isClicking) {
-            KeyBinding.setKeyBindState(mc.gameSettings.keyBindAttack.getKeyCode(), false);
-            isClicking = false;
-        }
-    }
-
-    private void loadRecording(String name) {
-        recordedDelays.clear();
-        File dir = new File(mc.mcDataDir, "atl" + File.separator + "recordings");
-        File file = new File(dir, name + ".txt");
-        
-        if (!file.exists()) return;
-
-        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                try {
-                    if (line.contains(":")) {
-                        String[] split = line.split(":");
-                        recordedDelays.add(new ClickData(Long.parseLong(split[0]), Long.parseLong(split[1])));
-                    } else {
-                        // Backward compatibility for old recordings
-                        recordedDelays.add(new ClickData(Long.parseLong(line.trim()), 30));
+            if (lookingAtEntity()) {
+                if (Mouse.isButtonDown(0)) {
+                    double speedLeft = 1.0 / (randomizer - 0.2 + Math.random() * 0.2);
+                    double leftHold = speedLeft / (randomizer - 0.02 + Math.random() * 0.02);
+                    if ((System.currentTimeMillis() - lastJitterClick) > (speedLeft * 1000)) {
+                        lastJitterClick = System.currentTimeMillis();
+                        int key = mc.gameSettings.keyBindAttack.getKeyCode();
+                        KeyBinding.setKeyBindState(key, true);
+                        KeyBinding.onTick(key);
+                    } else if ((System.currentTimeMillis() - leftHold) > (leftHold * 1000)) {
+                        KeyBinding.setKeyBindState(mc.gameSettings.keyBindAttack.getKeyCode(), false);
                     }
-                } catch (NumberFormatException ignored) {}
+                }
+            } else if (Mouse.isButtonDown(0)) {
+                KeyBinding.setKeyBindState(mc.gameSettings.keyBindAttack.getKeyCode(), true);
             }
-        } catch (IOException e) {
-            e.printStackTrace();
+        } catch (Exception ignored) {}
+    }
+
+    private void hypixelClick() {
+        if (hitSelectBlocked()) return;
+
+        if (lookingAtEntity()) {
+            if (Mouse.isButtonDown(0)) {
+                if (nextButterflyLength < 0) {
+                    nextButterflyDelay--;
+                    if (nextButterflyDelay < 0) {
+                        nextButterflyDelay = randomInt(0, 3);
+                        nextButterflyLength = randomInt(3, 17);
+                    }
+                } else if (Math.random() < 0.95) {
+                    nextButterflyLength--;
+                    sendClick(0, true);
+                } else {
+                    sendClick(0, false);
+                }
+            }
+        } else if (Mouse.isButtonDown(0)) {
+            KeyBinding.setKeyBindState(mc.gameSettings.keyBindAttack.getKeyCode(), true);
         }
     }
 
-    private void generateNextDelay(long referenceTime) {
-        if (recorded.isEnabled() && !recordedDelays.isEmpty()) {
-            ClickData data = recordedDelays.get(currentRecordIndex);
-            
-            nextClickTime = referenceTime + data.interval;
-            currentRecordedGap = data.gap;
-            
-            currentRecordIndex++;
-            // If we hit the end, pick a random spot to resume
-            if (currentRecordIndex >= recordedDelays.size()) {
-                currentRecordIndex = ThreadLocalRandom.current().nextInt(recordedDelays.size());
+    private void dragClick() {
+        if (hitSelectBlocked()) return;
+
+        if (lookingAtEntity()) {
+            if (Mouse.isButtonDown(0)) {
+                if (nextDragLength < 0) {
+                    nextDragDelay--;
+                    if (nextDragDelay < 0) {
+                        int d = (int) dragDelay.value;
+                        int l = (int) dragLength.value;
+                        nextDragDelay  = randomInt(Math.max(1, d - 1), d + 1);
+                        nextDragLength = randomInt(Math.max(1, l - 3), l + 3);
+                    }
+                } else if (Math.random() < 0.95) {
+                    nextDragLength--;
+                    sendClick(0, true);
+                    if (Math.random() < 0.4) {
+                        if (hasTimeElapsed(dragTimer, (long) (Math.random() * 4) * 13)) {
+                            dragTimer = System.currentTimeMillis();
+                            sendClick(0, true);
+                        }
+                    }
+                } else {
+                    sendClick(0, false);
+                }
             }
-            return;
-        }
-
-        double avg = targetCps.value;
-
-        // Apply exhaustion penalty: Reduce average CPS by 3
-        if (isExhausted) {
-            avg = Math.max(1.0, avg - 3.0);
-        }
-
-        // Ease into and out of spikes using an Exponential Moving Average (EMA)
-        // We cube the Gaussian for high kurtosis, then blend it with the previous value.
-        double gauss = ThreadLocalRandom.current().nextGaussian();
-        double targetFluctuation = Math.pow(gauss, 3) * 5.0; // Increased multiplier for wider CPS swings
-
-        // EMA Smoothing: 50% previous state, 50% new target. 
-        // This creates "streaks" of speed rather than isolated sharp jumps.
-        // Widened the clamp to +/- 8.0 CPS to allow for more significant "speed-ups" and "slow-downs".
-        currentFluctuation = Math.max(-8.0, Math.min(8.0, (currentFluctuation * 0.5) + (targetFluctuation * 0.5)));
-        
-        // Hard cap at 22 CPS and a higher safety floor of 5.0 CPS as requested.
-        double actualCps = Math.min(22.0, Math.max(5.0, avg + currentFluctuation));
-
-        // Easing logic: Cap the randomized target at 15 CPS for the first 2 seconds of clicking
-        long elapsed = System.currentTimeMillis() - sessionStartTime;
-        if (elapsed < 2000) {
-            actualCps = Math.min(actualCps, 15.0);
-        }
-
-        long baseDelay = (long) (1000.0 / Math.max(1.0, actualCps));
-
-        // Disable butterfly double-clicks during the ease-in period to stay under the 15 CPS limit
-        if (butterfly.isEnabled() && elapsed >= 2000) {
-            if (secondButterflyClick) {
-                nextClickTime = referenceTime + (baseDelay * 2) - lastFastDelay;
-                secondButterflyClick = false;
-            } else {
-                // Rapid double-tap simulation (5ms to 15ms)
-                lastFastDelay = ThreadLocalRandom.current().nextLong(5, 16);
-                nextClickTime = referenceTime + lastFastDelay;
-                secondButterflyClick = true;
-            }
-        } else {
-            nextClickTime = referenceTime + baseDelay;
-        }
-
-        // Peaky Jitter: Using a higher power here also increases interval kurtosis
-        // Raising the power to 5 ensures that the "center" remains tight, while the "tails" 
-        // (outliers) become significantly more common and pronounced.
-        double jitterGauss = ThreadLocalRandom.current().nextGaussian();
-        // Increased multiplier to 12.0 to create large, human-like timing inconsistencies.
-        nextClickTime += (long) (Math.pow(jitterGauss, 5) * 12.0);
-
-        // Hard clamp to ensure the outlier never results in an interval longer than 200ms (5 CPS)
-        if (nextClickTime > referenceTime + 200) {
-            nextClickTime = referenceTime + 200;
+        } else if (Mouse.isButtonDown(0)) {
+            KeyBinding.setKeyBindState(mc.gameSettings.keyBindAttack.getKeyCode(), true);
         }
     }
 
-    private long getReleaseDelay() {
-        if (recorded.isEnabled() && !recordedDelays.isEmpty()) {
-            return currentRecordedGap;
+    private void blatantClick() {
+        if (hitSelectBlocked()) return;
+
+        int cps = estimateCPS();
+
+        if (cps > 22) return;
+
+        if (lookingAtEntity()) {
+            if (Mouse.isButtonDown(0)) {
+                Random random = new Random();
+
+                if (nextBlatantLength < 0) {
+                    nextBlatantDelay--;
+                    if (nextBlatantDelay < 0) {
+                        nextBlatantDelay  = randomInt(0, 1);
+                        nextBlatantLength = randomInt(0, 23);
+                    }
+                } else if (Math.random() < 0.9289789) {
+                    if (Math.random() < 0.09289789 && cps >= 6 && cps < 12) {
+                        if (hasTimeElapsed(blatantTimer, (long) random.nextInt(3) * 8)) {
+                            blatantTimer = System.currentTimeMillis();
+                            sendClick(0, true);
+                        }
+                    }
+                    nextBlatantLength--;
+                    sendClick(0, true);
+                    if (cps >= 12 && cps <= 16 && Math.random() < 0.3) {
+                        if (hasTimeElapsed(blatantTimer, (long) random.nextInt(3) * 12)) {
+                            blatantTimer = System.currentTimeMillis();
+                            sendClick(0, true);
+                        }
+                    }
+                    if (blatantBoost > 3 && cps > 16 && Math.random() < 0.6) {
+                        if (hasTimeElapsed(blatantTimer, (long) random.nextInt(3) * 17)) {
+                            blatantTimer = System.currentTimeMillis();
+                            sendClick(0, true);
+                        }
+                        blatantBoost = 0;
+                    }
+                } else {
+                    sendClick(0, false);
+                }
+            }
+        } else if (Mouse.isButtonDown(0)) {
+            KeyBinding.setKeyBindState(mc.gameSettings.keyBindAttack.getKeyCode(), true);
         }
-        // Default human-like gap (10ms - 40ms)
-        return ThreadLocalRandom.current().nextLong(10, 41);
+    }
+
+    private void customClick() {
+        if (hitSelectBlocked()) return;
+
+        if (lookingAtEntity()) {
+            if (Mouse.isButtonDown(0)) {
+                if (attackReady()) {
+                    sendClick(0, true);
+                    customLastClick = System.currentTimeMillis();
+                    customRandomDelay = nextSecureInt((int) customMin.value, (int) customMax.value);
+                } else {
+                    sendClick(0, false);
+                }
+            }
+        } else if (Mouse.isButtonDown(0)) {
+            KeyBinding.setKeyBindState(mc.gameSettings.keyBindAttack.getKeyCode(), true);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Helpers
+    // -------------------------------------------------------------------------
+
+    private boolean hitSelectBlocked() {
+        if (!hitSelect.enabled) return false;
+        int hurt = mc.thePlayer.hurtTime;
+        return hurt != 0 && hurt >= (int) hitSelectTick.value && hurt <= 7;
+    }
+
+    private boolean lookingAtEntity() {
+        return mc.objectMouseOver != null
+                && mc.objectMouseOver.typeOfHit != null
+                && mc.objectMouseOver.typeOfHit != MovingObjectPosition.MovingObjectType.BLOCK;
+    }
+
+    private boolean attackReady() {
+        if (customSmart.enabled
+                && mc.objectMouseOver != null
+                && mc.objectMouseOver.typeOfHit == MovingObjectPosition.MovingObjectType.ENTITY
+                && mc.objectMouseOver.entityHit instanceof EntityLivingBase) {
+            EntityLivingBase entity = (EntityLivingBase) mc.objectMouseOver.entityHit;
+            if ((entity.hurtTime == 0 || entity.hurtTime == 1) && Math.random() < 0.5) {
+                return true;
+            }
+        }
+        return System.currentTimeMillis() - customLastClick >= customRandomDelay;
+    }
+
+    private static boolean hasTimeElapsed(long last, long ms) {
+        return System.currentTimeMillis() - last >= ms;
+    }
+
+    private static int randomInt(int min, int max) {
+        if (min >= max) return min;
+        return min + (int) (Math.random() * (max - min));
+    }
+
+    private static long nextSecureInt(int origin, int bound) {
+        if (origin >= bound) return origin;
+        return origin + (long) new SecureRandom().nextInt(bound - origin);
+    }
+
+    /** Rough CPS estimate based on clicks counted in the last second. */
+    private int estimateCPS() {
+        long now = System.currentTimeMillis();
+        if (now - blatantWindowStart >= 1000) {
+            blatantWindowStart = now;
+            blatantClickCount = 0;
+        }
+        return blatantClickCount;
+    }
+
+    private static void sendClick(int button, boolean state) {
+        int key = button == 0
+                ? mc.gameSettings.keyBindAttack.getKeyCode()
+                : mc.gameSettings.keyBindUseItem.getKeyCode();
+        KeyBinding.setKeyBindState(key, state);
+        if (state) KeyBinding.onTick(key);
+    }
+
+    @Override
+    public void onDisable() {
+        if (mc.gameSettings != null) {
+            KeyBinding.setKeyBindState(mc.gameSettings.keyBindAttack.getKeyCode(), false);
+        }
+        nextDragLength = 0;
+        nextDragDelay = 0;
+        nextButterflyLength = 0;
+        nextButterflyDelay = 0;
+        nextBlatantLength = 0;
+        nextBlatantDelay = 0;
+        blatantBoost = 0;
     }
 }

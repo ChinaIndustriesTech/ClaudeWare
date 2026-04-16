@@ -8,6 +8,7 @@
     "MixinEntity",
     "MixinEntityRenderer",
     "IMinecraft",
+    "MixinMinecraft",
     "MixinNetHandlerPlayClient",
     "accessor.IGuiScreen",
     "accessor.IAccessorEntityLivingBase"

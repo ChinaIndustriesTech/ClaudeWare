@@ -48,8 +48,8 @@ public class GUIClicker extends Module {
         // 3. Logic Fix: Don't autoclick while the ClickGUI is open
         if (mc.currentScreen instanceof ClickGuiScreen) return;
 
-        // Only click if the user is holding down the Left Mouse Button (0)
-        if (Mouse.isButtonDown(0)) {
+        // Only click if the user is holding down the Left Mouse Button (0) and the hotbar isn't full
+        if (Mouse.isButtonDown(0) && !isHotbarFull()) {
             long currentTime = System.currentTimeMillis();
 
 // Initialize the timer on the first press
@@ -69,6 +69,19 @@ public class GUIClicker extends Module {
             // Reset the timer when not clicking so the first click is responsive
             nextClickTime = 0;
         }
+    }
+
+    /**
+     * Checks if all 9 slots of the hotbar are currently occupied.
+     */
+    private boolean isHotbarFull() {
+        Minecraft mc = Minecraft.getMinecraft();
+        if (mc.thePlayer == null) return false;
+
+        for (int i = 0; i < 9; i++) {
+            if (mc.thePlayer.inventory.mainInventory[i] == null) return false;
+        }
+        return true;
     }
 
     /**

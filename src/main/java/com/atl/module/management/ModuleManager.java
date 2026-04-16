@@ -45,6 +45,7 @@ public class ModuleManager {
         register(new AutoArmor());
         register(new AimAssist());
         register(new NoJumpDelay());
+        register(new NoHitDelay());
     }
 
     private void register(Module module) {
