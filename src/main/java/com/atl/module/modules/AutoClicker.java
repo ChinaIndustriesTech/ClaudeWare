@@ -45,7 +45,7 @@ public class AutoClicker extends Module {
     private int blatantClickCount = 0;
     private long blatantWindowStart = 0;
 
-    
+
 
     // Blatant timer
     private long blatantTimer = 0;

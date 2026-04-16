@@ -48,8 +48,8 @@ public class GUIClicker extends Module {
         // 3. Logic Fix: Don't autoclick while the ClickGUI is open
         if (mc.currentScreen instanceof ClickGuiScreen) return;
 
-        // Only click if the user is holding down the Left Mouse Button (0) and the hotbar isn't full
-        if (Mouse.isButtonDown(0) && !isHotbarFull()) {
+        // Only click if the user is holding down the Left Mouse Button (0), Shift is held, and the hotbar isn't full
+        if (Mouse.isButtonDown(0) && GuiScreen.isShiftKeyDown() && !isHotbarFull()) {
             long currentTime = System.currentTimeMillis();
 
 // Initialize the timer on the first press
