@@ -1,12 +1,17 @@
 package com.atl.module.modules;
 
+import com.atl.mixin.IMinecraft;
 import com.atl.module.management.BooleanSetting;
 import com.atl.module.management.Category;
 import com.atl.module.management.Module;
 import com.atl.module.management.NumberSetting;
 import com.google.gson.JsonObject;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.entity.EntityPlayerSP;
 import net.minecraft.client.settings.KeyBinding;
+import net.minecraft.entity.EntityLivingBase;
+import net.minecraft.entity.player.EntityPlayer;
+import net.minecraft.item.*;
 import net.minecraft.util.MovingObjectPosition;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
@@ -31,6 +36,9 @@ public class AutoClicker extends Module {
     private final BooleanSetting butterfly = new BooleanSetting("Butterfly", false);
     private final BooleanSetting exhaustion = new BooleanSetting("Exhaustion", true);
     private final BooleanSetting recorded = new BooleanSetting("Recorded", false);
+    // Newly added settings from your provided code
+    private final BooleanSetting weaponsOnly = new BooleanSetting("Weapons Only", false);
+    private final BooleanSetting breakBlocks = new BooleanSetting("Break Blocks", true);
 
     private long nextClickTime;
     private long sessionStartTime;
@@ -49,7 +57,7 @@ public class AutoClicker extends Module {
 
     public AutoClicker() {
         super("AutoClicker", "Automatically clicks while holding Left Click", Category.COMBAT);
-        addSettings(targetCps, butterfly, exhaustion, recorded);
+        addSettings(targetCps, butterfly, exhaustion, recorded, weaponsOnly, breakBlocks);
     }
 
     @Override
@@ -58,6 +66,8 @@ public class AutoClicker extends Module {
         if (settings.has("butterfly")) butterfly.enabled = settings.get("butterfly").getAsBoolean();
         if (settings.has("exhaustion")) exhaustion.enabled = settings.get("exhaustion").getAsBoolean();
         if (settings.has("recorded")) recorded.enabled = settings.get("recorded").getAsBoolean();
+        if (settings.has("weaponsOnly")) weaponsOnly.enabled = settings.get("weaponsOnly").getAsBoolean();
+        if (settings.has("breakBlocks")) breakBlocks.enabled = settings.get("breakBlocks").getAsBoolean();
         if (settings.has("recordingName")) {
             currentRecordingName = settings.get("recordingName").getAsString();
             loadRecording(currentRecordingName);
@@ -71,6 +81,8 @@ public class AutoClicker extends Module {
         settings.addProperty("butterfly", butterfly.enabled);
         settings.addProperty("exhaustion", exhaustion.enabled);
         settings.addProperty("recorded", recorded.enabled);
+        settings.addProperty("weaponsOnly", weaponsOnly.enabled);
+        settings.addProperty("breakBlocks", breakBlocks.enabled);
         settings.addProperty("recordingName", currentRecordingName);
         return settings;
     }
@@ -123,11 +135,11 @@ public class AutoClicker extends Module {
             return;
         }
 
-        // Check if we are hovering over a block
-        boolean overBlock = mc.objectMouseOver != null && mc.objectMouseOver.typeOfHit == MovingObjectPosition.MovingObjectType.BLOCK;
+        // Validate if we can actually click based on the new filters
+        boolean canClick = canClick();
 
-        // Only click if the physical Left Click (Button 0) is held down AND we aren't looking at a block
-        if (!Mouse.isButtonDown(0) || overBlock) {
+        // Only click if the physical Left Click (Button 0) is held down AND filters allow it
+        if (!Mouse.isButtonDown(0) || !canClick) {
             sessionStartTime = System.currentTimeMillis();
             isExhausted = false;
             secondButterflyClick = false;
@@ -172,8 +184,49 @@ public class AutoClicker extends Module {
         }
     }
 
+    private boolean canClick() {
+        if (mc.currentScreen != null) return false;
+
+        // Filter by item type
+        if (weaponsOnly.isEnabled() && !isHoldingSword()) {
+            return false;
+        }
+
+        // Block interaction logic
+        if (mc.objectMouseOver != null && mc.objectMouseOver.typeOfHit == MovingObjectPosition.MovingObjectType.BLOCK) {
+            // If breakBlocks is on, we stop clicking unless there is a valid entity target nearby
+            if (breakBlocks.isEnabled()) {
+                return hasValidTarget();
+            }
+        }
+
+        return true;
+    }
+
+    private boolean isHoldingSword() {
+        ItemStack stack = mc.thePlayer.getHeldItem();
+        return stack != null && stack.getItem() instanceof ItemSword;
+    }
+
+    private boolean hasValidTarget() {
+        // Check if we are currently looking at an entity (even through blocks if using Reach/Aura)
+        if (mc.objectMouseOver != null && mc.objectMouseOver.typeOfHit == MovingObjectPosition.MovingObjectType.ENTITY) {
+            if (mc.objectMouseOver.entityHit instanceof EntityLivingBase) {
+                EntityLivingBase target = (EntityLivingBase) mc.objectMouseOver.entityHit;
+                // Ignore dead entities
+                return target.deathTime <= 0;
+            }
+        }
+        return false;
+    }
+
     private void doClick() {
         int key = mc.gameSettings.keyBindAttack.getKeyCode();
+        
+        // Resetting the leftClickCounter allows the attack to register even if the 
+        // game thinks we just swung, mirroring how hardware input overrides timers.
+        ((IMinecraft) mc).setLeftClickCounter(0);
+        
         KeyBinding.setKeyBindState(key, true);
         KeyBinding.onTick(key); // Triggers standard Minecraft attack logic
         isClicking = true;

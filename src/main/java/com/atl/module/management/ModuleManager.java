@@ -43,6 +43,8 @@ public class ModuleManager {
         register(new FastPlace());
         register(new Reach());
         register(new AutoArmor());
+        register(new AimAssist());
+        register(new NoJumpDelay());
     }
 
     private void register(Module module) {

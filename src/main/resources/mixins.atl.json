@@ -9,7 +9,8 @@
     "MixinEntityRenderer",
     "IMinecraft",
     "MixinNetHandlerPlayClient",
-    "accessor.IGuiScreen"
+    "accessor.IGuiScreen",
+    "accessor.IAccessorEntityLivingBase"
   ],
   "injectors": { "defaultRequire": 1 }
 }
