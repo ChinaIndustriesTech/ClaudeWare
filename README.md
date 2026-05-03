@@ -1,1 +1,3 @@
 this is literally 100% ai do not expect anything to be good
+
+type ,help in chat for help
