@@ -17,9 +17,7 @@ import org.lwjgl.input.Mouse;
 import org.lwjgl.opengl.GL11;
 
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 public class SidebarGuiScreen extends GuiScreen {
@@ -32,14 +30,16 @@ public class SidebarGuiScreen extends GuiScreen {
 
     private Module selectedModule = null;
 
+    private float guiAlpha = 0f;
     private float moduleScrollOffset = 0;
     private float settingsScrollOffset = 0;
     private float maxModuleScroll = 0;
     private float maxSettingsScroll = 0;
+    private float moduleScrollTarget = 0;
+    private float settingsScrollTarget = 0;
 
-    // Map to store animation progress for each BooleanSetting
     private Map<BooleanSetting, Float> booleanAnimationProgress = new HashMap<>();
-    private final float ANIMATION_SPEED = 0.05f; // Lower = slower/smoother, higher = snappier
+    private final float ANIMATION_SPEED = 0.15f;
 
     public SidebarGuiScreen(ClickGUI parent) {
         this.parent = parent;
@@ -48,13 +48,13 @@ public class SidebarGuiScreen extends GuiScreen {
     @Override
     public void initGui() {
         super.initGui();
+        guiAlpha = 0f;
         this.panelX = (this.width - panelWidth) / 2;
         this.panelY = (this.height - panelHeight) / 2;
 
         if (parent.lastCategory == null) {
             parent.lastCategory = Category.values()[0];
         }
-        // Initialize animation progress for existing settings
         for (Module m : Claude.moduleManager.getAll()) {
             for (Setting s : m.settings) {
                 if (s instanceof BooleanSetting) {
@@ -68,6 +68,31 @@ public class SidebarGuiScreen extends GuiScreen {
     @Override
     public void updateScreen() {
         super.updateScreen();
+    }
+
+    private int applyAlpha(int color, float alpha) {
+        int a = (int)(((color >> 24) & 0xFF) * alpha);
+        return (color & 0x00FFFFFF) | (a << 24);
+    }
+
+    private int withAlpha(int rgb, float alpha) {
+        return ((int)(alpha * 255) << 24) | (rgb & 0x00FFFFFF);
+    }
+
+    @Override
+    public void drawScreen(int mouseX, int mouseY, float partialTicks) {
+        handleMovement();
+
+        if (parent.fadeAnimation.enabled) {
+            guiAlpha += (1f - guiAlpha) * 0.2f;
+            if (1f - guiAlpha < 0.01f) guiAlpha = 1f;
+        } else {
+            guiAlpha = 1f;
+        }
+
+        moduleScrollOffset += (moduleScrollTarget - moduleScrollOffset) * 0.25f;
+        settingsScrollOffset += (settingsScrollTarget - settingsScrollOffset) * 0.25f;
+
         for (Module m : Claude.moduleManager.getAll()) {
             for (Setting s : m.settings) {
                 if (s instanceof BooleanSetting) {
@@ -75,29 +100,25 @@ public class SidebarGuiScreen extends GuiScreen {
                     float current = booleanAnimationProgress.getOrDefault(b, b.enabled ? 1.0f : 0.0f);
                     float target = b.enabled ? 1.0f : 0.0f;
                     float next = current + (target - current) * ANIMATION_SPEED;
-                    // Snap to target when close enough to avoid endless micro-updates
                     if (Math.abs(next - target) < 0.005f) next = target;
                     booleanAnimationProgress.put(b, next);
                 }
             }
         }
-    }
-
-    @Override
-    public void drawScreen(int mouseX, int mouseY, float partialTicks) {
-        handleMovement();
 
         int themeColor = parent.getThemeColor();
+        int themeA = applyAlpha(themeColor, guiAlpha);
 
-        drawHDBox(panelX, panelY, panelWidth, panelHeight, 8, 0xCC101010, false);
-        drawHDBox(panelX, panelY, sidebarWidth, panelHeight, 8, 0xFF1a1a1a, true);
+        drawHDBox(panelX, panelY, panelWidth, panelHeight, 8, applyAlpha(0xCC101010, guiAlpha), false);
+        drawHDBox(panelX, panelY, sidebarWidth, panelHeight, 8, applyAlpha(0xFF1a1a1a, guiAlpha), true);
 
         int catY = panelY + 10;
         for (Category cat : Category.values()) {
             boolean hovered = isHovered(panelX, catY, sidebarWidth, 20, mouseX, mouseY);
             boolean selected = parent.lastCategory == cat;
-            if (selected) Gui.drawRect(panelX, catY, panelX + 2, catY + 20, themeColor);
-            mc.fontRendererObj.drawStringWithShadow(cat.name(), panelX + 10, catY + 6, selected ? themeColor : (hovered ? -1 : 0xFFBBBBBB));
+            if (selected) Gui.drawRect(panelX, catY, panelX + 2, catY + 20, themeA);
+            int catColor = selected ? themeA : (hovered ? withAlpha(0xFFFFFF, guiAlpha) : withAlpha(0xBBBBBB, guiAlpha));
+            mc.fontRendererObj.drawStringWithShadow(cat.name(), panelX + 10, catY + 6, catColor);
             catY += 25;
         }
 
@@ -121,8 +142,20 @@ public class SidebarGuiScreen extends GuiScreen {
             if (m.getCategory() != parent.lastCategory) continue;
             boolean hovered = isHovered(moduleListX, currentModuleY, moduleListWidth, 20, mouseX, mouseY);
 
-            drawHDBox(moduleListX, currentModuleY, moduleListWidth, 20, 4, m.isEnabled() ? themeColor : (hovered ? 0xFF353535 : 0xFF202020), false);
-            mc.fontRendererObj.drawStringWithShadow(m.getName(), moduleListX + 5, currentModuleY + 6, m.isEnabled() ? -1 : 0xFFBBBBBB);
+            int moduleBg = m.isEnabled() ? themeA : (hovered ? applyAlpha(0xFF353535, guiAlpha) : applyAlpha(0xFF202020, guiAlpha));
+            drawHDBox(moduleListX, currentModuleY, moduleListWidth, 20, 4, moduleBg, false);
+            if (selectedModule == m) {
+                Gui.drawRect(moduleListX, currentModuleY, moduleListX + 2, currentModuleY + 20, withAlpha(0xFFFFFF, guiAlpha));
+            }
+            int moduleTextColor = m.isEnabled() ? withAlpha(0xFFFFFF, guiAlpha) : withAlpha(0xBBBBBB, guiAlpha);
+            mc.fontRendererObj.drawStringWithShadow(m.getName(), moduleListX + 5, currentModuleY + 6, moduleTextColor);
+
+            int keyCode = m.getKeybind();
+            if (keyCode > 0) {
+                String keyName = "[" + Keyboard.getKeyName(keyCode) + "]";
+                int keyWidth = mc.fontRendererObj.getStringWidth(keyName);
+                mc.fontRendererObj.drawStringWithShadow(keyName, moduleListX + moduleListWidth - keyWidth - 5, currentModuleY + 6, withAlpha(0x777777, guiAlpha));
+            }
 
             currentModuleY += 25;
             totalModuleHeight += 25;
@@ -140,38 +173,32 @@ public class SidebarGuiScreen extends GuiScreen {
                 if (s instanceof BooleanSetting) {
                     BooleanSetting b = (BooleanSetting) s;
                     boolean hovered = isHovered(settingsPanelX, currentSettingY, settingsPanelWidth, 15, mouseX, mouseY);
-                    mc.fontRendererObj.drawStringWithShadow(s.name, settingsPanelX, currentSettingY + 3, hovered ? -1 : 0xFFBBBBBB);
+                    int labelColor = hovered ? withAlpha(0xFFFFFF, guiAlpha) : withAlpha(0xBBBBBB, guiAlpha);
+                    mc.fontRendererObj.drawStringWithShadow(s.name, settingsPanelX, currentSettingY + 3, labelColor);
 
-                    // Pill toggle switch
                     int switchWidth = 20;
                     int switchHeight = 10;
                     int switchX = settingsPanelX + settingsPanelWidth - switchWidth - 5;
                     int switchY = currentSettingY + 3;
 
-                    // Read the smoothly interpolated progress (updated in updateScreen)
                     float currentProgress = booleanAnimationProgress.getOrDefault(b, b.enabled ? 1.0f : 0.0f);
+                    double knobX = switchX + 1 + (currentProgress * (switchWidth - 9));
 
-                    double knobX = switchX + 1 + (currentProgress * (switchWidth - 9)); // 9 is knob width + 1 padding
-
-                    // Draw background pill
-                    drawHDBox(switchX, switchY, switchWidth, switchHeight, 5, b.enabled ? themeColor : 0xFF333333, false);
-
-                    // Draw knob
-                    drawHDBox(knobX, switchY + 1, 8, 8, 4, -1, false);
+                    int pillColor = b.enabled ? themeA : applyAlpha(0xFF333333, guiAlpha);
+                    drawHDBox(switchX, switchY, switchWidth, switchHeight, 5, pillColor, false);
+                    drawHDBox(knobX, switchY + 1, 8, 8, 4, withAlpha(0xFFFFFF, guiAlpha), false);
 
                     currentSettingY += 18;
                     totalSettingHeight += 18;
                 } else if (s instanceof NumberSetting) {
                     NumberSetting n = (NumberSetting) s;
-                    mc.fontRendererObj.drawString(s.name + ": " + String.format("%.2f", n.value), settingsPanelX, currentSettingY, 0xFFBBBBBB, false);
+                    mc.fontRendererObj.drawStringWithShadow(s.name + ": " + String.format("%.2f", n.value), settingsPanelX, currentSettingY, withAlpha(0xBBBBBB, guiAlpha));
                     int sliderWidth = settingsPanelWidth - 10;
                     double renderWidth = sliderWidth * ((n.value - n.min) / (n.max - n.min));
 
-                    // Draw pill-shaped background
-                    drawHDBox(settingsPanelX + 5, currentSettingY + 12, sliderWidth, 4, 2, 0xFF333333, false);
-                    // Draw pill-shaped progress
+                    drawHDBox(settingsPanelX + 5, currentSettingY + 12, sliderWidth, 4, 2, applyAlpha(0xFF333333, guiAlpha), false);
                     if (renderWidth > 0) {
-                        drawHDBox(settingsPanelX + 5, currentSettingY + 12, renderWidth, 4, 2, themeColor, false);
+                        drawHDBox(settingsPanelX + 5, currentSettingY + 12, renderWidth, 4, 2, themeA, false);
                     }
 
                     if (Mouse.isButtonDown(0) && isHovered(settingsPanelX + 5, currentSettingY + 5, sliderWidth, 15, mouseX, mouseY)) {
@@ -182,8 +209,8 @@ public class SidebarGuiScreen extends GuiScreen {
                     totalSettingHeight += 25;
                 } else if (s instanceof ModeSetting) {
                     ModeSetting ms = (ModeSetting) s;
-                    mc.fontRendererObj.drawStringWithShadow(ms.name + ": ", settingsPanelX, currentSettingY, 0xFFBBBBBB);
-                    mc.fontRendererObj.drawStringWithShadow(ms.getValue(), settingsPanelX + mc.fontRendererObj.getStringWidth(ms.name + ": "), currentSettingY, themeColor);
+                    mc.fontRendererObj.drawStringWithShadow(ms.name + ": ", settingsPanelX, currentSettingY, withAlpha(0xBBBBBB, guiAlpha));
+                    mc.fontRendererObj.drawStringWithShadow(ms.getValue(), settingsPanelX + mc.fontRendererObj.getStringWidth(ms.name + ": "), currentSettingY, themeA);
                     currentSettingY += 18;
                     totalSettingHeight += 18;
                 }
@@ -191,6 +218,7 @@ public class SidebarGuiScreen extends GuiScreen {
             maxSettingsScroll = Math.max(0, totalSettingHeight - settingsPanelHeight);
             GL11.glDisable(GL11.GL_SCISSOR_TEST);
         }
+
         super.drawScreen(mouseX, mouseY, partialTicks);
     }
 
@@ -271,7 +299,10 @@ public class SidebarGuiScreen extends GuiScreen {
                 parent.lastCategory = cat;
                 selectedModule = null;
                 moduleScrollOffset = 0;
+                moduleScrollTarget = 0;
                 settingsScrollOffset = 0;
+                settingsScrollTarget = 0;
+                maxSettingsScroll = 0;
                 return;
             }
             catY += 25;
@@ -291,6 +322,8 @@ public class SidebarGuiScreen extends GuiScreen {
                     else if (mouseButton == 1) {
                         selectedModule = (selectedModule == m ? null : m);
                         settingsScrollOffset = 0;
+                        settingsScrollTarget = 0;
+                        maxSettingsScroll = 0;
                     }
                     return;
                 }
@@ -308,11 +341,8 @@ public class SidebarGuiScreen extends GuiScreen {
                 for (Setting s : selectedModule.settings) {
                     if (s instanceof BooleanSetting) {
                         BooleanSetting b = (BooleanSetting) s;
-
-                        // Click anywhere on the full row (text, gap, or switch) to toggle
                         if (isHovered(settingsPanelX, currentSettingY, settingsPanelWidth, 15, mouseX, mouseY)) {
                             b.toggle();
-                            booleanAnimationProgress.put(b, b.enabled ? 1.0f : 0.0f);
                             return;
                         }
                         currentSettingY += 18;
@@ -336,13 +366,13 @@ public class SidebarGuiScreen extends GuiScreen {
         int dWheel = Mouse.getDWheel();
 
         if (dWheel != 0) {
-            int scrollAmount = dWheel / 120 * 15;
+            int scrollAmount = dWheel / 120 * 20;
             int moduleListX = panelX + sidebarWidth + 5;
             int moduleListY = panelY + 5;
             int moduleListWidth = 150;
             int moduleListHeight = panelHeight - 10;
-            if (mouseX >= moduleListX && mouseX <= moduleListX + moduleListWidth && mouseY >= moduleListY && mouseY <= mouseY + moduleListHeight) {
-                moduleScrollOffset = MathHelper.clamp_float(moduleScrollOffset + scrollAmount, -maxModuleScroll, 0);
+            if (mouseX >= moduleListX && mouseX <= moduleListX + moduleListWidth && mouseY >= moduleListY && mouseY <= moduleListY + moduleListHeight) {
+                moduleScrollTarget = MathHelper.clamp_float(moduleScrollTarget + scrollAmount, -maxModuleScroll, 0);
             }
 
             int settingsPanelX = moduleListX + moduleListWidth + 5;
@@ -350,7 +380,7 @@ public class SidebarGuiScreen extends GuiScreen {
             int settingsPanelWidth = panelWidth - sidebarWidth - moduleListWidth - 15;
             int settingsPanelHeight = panelHeight - 10;
             if (mouseX >= settingsPanelX && mouseX <= settingsPanelX + settingsPanelWidth && mouseY >= settingsPanelY && mouseY <= settingsPanelY + settingsPanelHeight) {
-                settingsScrollOffset = MathHelper.clamp_float(settingsScrollOffset + scrollAmount, -maxSettingsScroll, 0);
+                settingsScrollTarget = MathHelper.clamp_float(settingsScrollTarget + scrollAmount, -maxSettingsScroll, 0);
             }
         }
     }
