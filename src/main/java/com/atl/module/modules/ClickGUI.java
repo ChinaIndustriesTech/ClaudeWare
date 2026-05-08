@@ -31,11 +31,12 @@ public class ClickGUI extends Module {
     public final NumberSetting textRed = new NumberSetting("Text Red", 0, 0, 255, 1);
     public final NumberSetting textGreen = new NumberSetting("Text Green", 0, 0, 255, 1);
     public final NumberSetting textBlue = new NumberSetting("Text Blue", 0, 0, 255, 1);
-
+    public final BooleanSetting fadeAnimation = new BooleanSetting("Fade Animation", true);
+    
     public ClickGUI() {
         super("ClickGUI", "The visual interface to manage modules", Category.RENDER);
         this.setKeybind(Keyboard.KEY_RSHIFT);
-        addSettings(style, red, green, blue, textRed, textGreen, textBlue);
+        addSettings(style, red, green, blue, textRed, textGreen, textBlue, fadeAnimation);
     }
 
     @SubscribeEvent(priority = EventPriority.LOWEST)
